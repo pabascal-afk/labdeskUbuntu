@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LabDesk - Control de Laboratorio</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Barra de Navegación Superior -->
+        <header class="navbar">
+            <div class="nav-brand">
+                <span class="logo-icon">🖥️</span>
+                <div class="logo-text">
+                    <h2>LabDesk</h2>
+                    <span class="badge-linux">Linux Ready</span>
+                </div>
+            </div>
+
+            <!-- Botonera de Acciones Globales del Aula -->
+            <div class="nav-actions">
+                <div class="btn-group">
+                    <button class="btn btn-warning" id="btn-lock-all" title="Bloquear Pantallas">🔒 Bloquear Todos</button>
+                    <button class="btn btn-success" id="btn-unlock-all" title="Desbloquear Pantallas">🔓 Desbloquear</button>
+                </div>
+
+                <div class="btn-group">
+                    <button class="btn btn-secondary" id="btn-mute-all" title="Silenciar Toda la Sala">🔇 Silenciar Sala</button>
+                    <button class="btn btn-secondary" id="btn-unmute-all" title="Reactivar Audio">🔊 Activar Audio</button>
+                </div>
+
+                <div class="btn-group">
+                    <button class="btn btn-primary" id="btn-open-tabs-modal" title="Gestionar Pestañas y Navegación">🌐 Navegación Web</button>
+                    <button class="btn btn-secondary" id="btn-turn-ins-modal" title="Buzón de Tareas">📥 Entregas <span class="badge" id="turn-in-count">0</span></button>
+                    <button class="btn btn-secondary" id="btn-scripts-modal" title="Scripts Bash">📜 Scripts</button>
+                </div>
+
+                <div class="btn-group">
+                    <button class="btn btn-danger" id="btn-power-modal" title="Control de Energía">⚡ Energía</button>
+                    <button class="btn btn-secondary" id="btn-settings-modal" title="Configuraciones">⚙️ Ajustes</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Pestañas de Sectores / Aulas -->
+        <div class="sectors-bar">
+            <div class="sector-tabs-container">
+                <div class="sector-tabs" id="sector-tabs">
+                    <!-- Se rellena dinámicamente -->
+                </div>
+                <button class="btn-add-sector" id="btn-add-sector" title="Añadir nueva Aula o Sala">+ Nueva Aula</button>
+            </div>
+            <div class="sector-bar-right">
+                <button class="btn btn-secondary btn-sm" id="btn-cleanup-duplicates" title="Eliminar equipos duplicados o desconectados">
+                    🧹 Limpiar Desconectados
+                </button>
+            </div>
+        </div>
+
+        <!-- Área Principal de Equipos -->
+        <main class="main-content">
+            <div class="content-header">
+                <div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <h1 id="active-sector-title">Monitor de Sala</h1>
+                        <span id="primary-aula-badge" class="badge-primary-aula" style="display:none;" title="Esta aula es la pantalla principal en este navegador">⭐ Principal</span>
+                    </div>
+                    <p class="subtitle" id="sector-stats">Cargando estaciones...</p>
+                </div>
+                <div class="filter-controls">
+                    <input type="text" id="client-search" placeholder="🔍 Buscar equipo o estudiante..." class="input-search">
+                    <button class="btn btn-secondary btn-sm" id="btn-refresh-grid">🔄 Refrescar</button>
+                </div>
+            </div>
+
+            <!-- Cuadrícula de Estaciones de Alumnos -->
+            <div class="clients-grid" id="clients-grid">
+                <!-- Se rellena dinámicamente -->
+            </div>
+        </main>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL: NAVEGACIÓN WEB Y PESTAÑAS (GOOGLE)      -->
+    <!-- ============================================== -->
+    <div id="modal-browser" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🌐 Enviar Enlace / Página Cautiva</h3>
+                <button class="btn-close" onclick="closeModal('modal-browser')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="help-text">Abre instantáneamente una página web o examen en los equipos seleccionados.</p>
+                
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <label style="margin:0;">Accesos Directos Educativos:</label>
+                    <button type="button" class="btn-preset-toggle" onclick="toggleAdminPresetEditor()">⚙️ Personalizar Accesos</button>
+                </div>
+
+                <div class="quick-links-grid" id="admin-presets-grid">
+                    <!-- Rellenado dinámicamente -->
+                </div>
+
+                <!-- Editor de Accesos Directos Personalizados -->
+                <div id="admin-preset-editor-panel" class="preset-editor-panel" style="display:none;">
+                    <div class="editor-header">
+                        <strong>Editar Accesos Directos</strong>
+                        <button type="button" class="btn-reset-presets" onclick="resetAdminPresets()">Restaurar</button>
+                    </div>
+                    <div id="admin-preset-items-list" class="preset-items-list">
+                        <!-- Lista de accesos -->
+                    </div>
+                    <div class="preset-new-form">
+                        <input type="text" id="admin-new-preset-icon" placeholder="Icono" style="width:55px;" value="🌐">
+                        <input type="text" id="admin-new-preset-name" placeholder="Nombre (ej. Examen de Ciencias)">
+                        <input type="text" id="admin-new-preset-url" placeholder="https://...">
+                        <button type="button" class="btn-add-preset" onclick="addAdminPreset()">+ Añadir</button>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-top: 1rem;">
+                    <label for="browser-url-input">Dirección URL personalizada:</label>
+                    <input type="text" id="browser-url-input" class="input-text" placeholder="https://es.wikipedia.org">
+                </div>
+
+                <div class="form-group-checkbox">
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                        <input type="checkbox" id="kiosk-exam-mode">
+                        <div>
+                            <strong>Página Cautiva</strong> <span style="font-size:0.8rem; color:#94a3b8;">(Modo Examen: fija la URL y bloquea la navegación a otros sitios)</span>
+                        </div>
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label>Destino:</label>
+                    <select id="browser-target-select" class="select-box">
+                        <option value="all">Toda la sala (Todos los equipos conectados)</option>
+                        <option value="sector">Solo el aula activa</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('modal-browser')">Cancelar</button>
+                <button class="btn btn-primary" id="btn-send-url">🚀 Abrir en Estaciones</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL: BUZÓN DE TAREAS ENTREGADAS              -->
+    <!-- ============================================== -->
+    <div id="modal-turn-ins" class="modal">
+        <div class="modal-content modal-wide">
+            <div class="modal-header">
+                <h3>📥 Buzón de Tareas Entregadas por Estudiantes</h3>
+                <button class="btn-close" onclick="closeModal('modal-turn-ins')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="help-text">Documentos entregados directamente desde Mini Writer, Mini Calc o Mini Slides.</p>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Fecha/Hora</th>
+                                <th>Estudiante</th>
+                                <th>Equipo</th>
+                                <th>Aplicación</th>
+                                <th>Archivo</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="turn-ins-tbody">
+                            <tr><td colspan="6" class="text-center">No hay tareas entregadas todavía.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('modal-turn-ins')">Cerrar</button>
+                <button class="btn btn-primary" onclick="fetchTurnIns()">🔄 Actualizar Lista</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL: BIBLIOTECA DE SCRIPTS BASH              -->
+    <!-- ============================================== -->
+    <div id="modal-scripts" class="modal">
+        <div class="modal-content modal-wide">
+            <div class="modal-header">
+                <h3>📜 Biblioteca de Scripts Linux (Bash)</h3>
+                <button class="btn-close" onclick="closeModal('modal-scripts')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="scripts-grid" id="scripts-container">
+                    <!-- Se rellena con scripts por defecto -->
+                </div>
+                <div class="script-output-box" id="script-output" style="display:none;">
+                    <h4>Salida de Ejecución:</h4>
+                    <pre id="script-output-text"></pre>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('modal-scripts')">Cerrar</button>
+                <button class="btn btn-primary" id="btn-new-script">+ Crear Script</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL: CONTROL DE ENERGÍA                      -->
+    <!-- ============================================== -->
+    <div id="modal-power" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>⚡ Control de Energía y Mantenimiento</h3>
+                <button class="btn-close" onclick="closeModal('modal-power')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="power-actions-list">
+                    <div class="power-card">
+                        <div>
+                            <strong>✨ Encender Equipos (Wake-on-LAN)</strong>
+                            <p>Envía paquete mágico a las direcciones MAC registradas.</p>
+                        </div>
+                        <button class="btn btn-primary" onclick="sendPowerAction('wake')">Encender</button>
+                    </div>
+
+                    <div class="power-card">
+                        <div>
+                            <strong>🔄 Reiniciar Estaciones</strong>
+                            <p>Ejecuta reinicio limpio en todos los equipos del sector.</p>
+                        </div>
+                        <button class="btn btn-warning" onclick="sendPowerAction('reboot')">Reiniciar</button>
+                    </div>
+
+                    <div class="power-card">
+                        <div>
+                            <strong>🛑 Apagar Estaciones</strong>
+                            <p>Apaga ordenadamente los equipos al finalizar la clase.</p>
+                        </div>
+                        <button class="btn btn-danger" onclick="sendPowerAction('shutdown')">Apagar Todo</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('modal-power')">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL: AJUSTES Y PIN                           -->
+    <!-- ============================================== -->
+    <div id="modal-settings" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>⚙️ Configuración del Aula</h3>
+                <button class="btn-close" onclick="closeModal('modal-settings')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="setting-pin">PIN de Desbloqueo en Pantalla:</label>
+                    <input type="text" id="setting-pin" class="input-text" maxlength="6">
+                    <small>Este PIN permite desbloquear un equipo físicamente si se requiere.</small>
+                </div>
+                <div class="form-group" style="margin-top: 1rem;">
+                    <label>Fondo de Pantalla Institucional (Branding):</label>
+                    <input type="file" id="setting-wallpaper" accept="image/*" class="input-file">
+                    <small>Se aplicará como fondo de escritorio y pantalla de bloqueo en todos los alumnos.</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('modal-settings')">Cancelar</button>
+                <button class="btn btn-primary" id="btn-save-settings">Guardar Cambios</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL: ESCRITORIO REMOTO INTERACTIVO (RDP)     -->
+    <!-- ============================================== -->
+    <div id="modal-rdp" class="modal">
+        <div class="modal-content modal-fullscreen">
+            <div class="modal-header">
+                <h3 id="rdp-title">🖥️ Control Remoto</h3>
+                <div class="rdp-header-actions">
+                    <button class="btn btn-sm btn-secondary" id="btn-rdp-refresh">Actualizar Captura</button>
+                    <button class="btn-close" onclick="closeRdp()">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body rdp-canvas-container">
+                <img id="rdp-screen-img" class="rdp-screen" alt="Pantalla remota">
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

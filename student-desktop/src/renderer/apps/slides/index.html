@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Slides - LabDesk</title>
+    <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Source+Code+Pro:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        body { background: #0b1120; color: #f8fafc; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* HEADER */
+        .slides-header {
+            background: #1e293b;
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #334155;
+            gap: 12px;
+            flex-wrap: nowrap;
+        }
+        .header-left { display: flex; align-items: center; gap: 10px; }
+        .app-badge {
+            background: #f59e0b;
+            color: #0f172a;
+            font-size: 11px;
+            font-weight: 800;
+            padding: 3px 8px;
+            border-radius: 4px;
+            letter-spacing: 0.5px;
+        }
+        .pres-title-input {
+            background: transparent;
+            border: 1px solid transparent;
+            color: #f8fafc;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 4px;
+            width: 240px;
+        }
+        .pres-title-input:hover, .pres-title-input:focus {
+            background: #0f172a;
+            border-color: #f59e0b;
+            outline: none;
+        }
+        .header-actions { display: flex; gap: 6px; align-items: center; }
+
+        /* BUTTONS */
+        .btn {
+            border: none;
+            padding: 6px 11px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.15s;
+        }
+        .btn-warning { background: #f59e0b; color: #0f172a; }
+        .btn-warning:hover { background: #d97706; }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-success:hover { background: #059669; }
+        .btn-secondary { background: #334155; color: #f8fafc; }
+        .btn-secondary:hover { background: #475569; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-danger:hover { background: #dc2626; }
+
+        /* TOOLBAR */
+        .toolbar {
+            background: #182234;
+            padding: 6px 14px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border-bottom: 1px solid #334155;
+            flex-wrap: wrap;
+        }
+        .tool-group {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            padding: 0 5px;
+            border-right: 1px solid #334155;
+        }
+        .tool-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            color: #cbd5e1;
+            padding: 4px 7px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 26px;
+            height: 26px;
+        }
+        .tool-btn:hover { background: #334155; color: white; }
+        .tool-btn.active { background: #f59e0b; color: #0f172a; }
+        .tool-select {
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: #f8fafc;
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            outline: none;
+            cursor: pointer;
+            height: 26px;
+        }
+        .tool-label { font-size: 11px; color: #94a3b8; margin-right: 3px; }
+        .color-picker-wrap {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            cursor: pointer;
+        }
+        .color-picker-wrap input[type="color"] {
+            opacity: 0;
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        /* MAIN BODY */
+        .slides-body {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* SIDEBAR THUMBNAILS */
+        .slides-sidebar {
+            width: 190px;
+            background: #131d31;
+            border-right: 1px solid #334155;
+            padding: 10px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .sidebar-actions {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 4px;
+        }
+        .thumb-card {
+            background: #1e293b;
+            border: 2px solid transparent;
+            border-radius: 6px;
+            height: 94px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            padding: 6px 8px;
+            position: relative;
+            transition: all 0.15s;
+            overflow: hidden;
+        }
+        .thumb-card:hover { border-color: #64748b; }
+        .thumb-card.active { border-color: #f59e0b; background: #1a2744; }
+        .thumb-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 10px;
+            font-weight: 700;
+            color: #94a3b8;
+            margin-bottom: 4px;
+        }
+        .thumb-card.active .thumb-top { color: #f59e0b; }
+        .thumb-preview {
+            flex: 1;
+            background: rgba(0,0,0,0.25);
+            border-radius: 4px;
+            padding: 4px;
+            font-size: 10px;
+            overflow: hidden;
+            color: #cbd5e1;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .thumb-preview-title { font-weight: 700; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .thumb-preview-snippet { font-size: 8px; color: #94a3b8; line-height: 1.2; overflow: hidden; max-height: 28px; }
+
+        /* CANVAS STAGE */
+        .slide-stage {
+            flex: 1;
+            background: #090e1a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            overflow: auto;
+            position: relative;
+        }
+        .stage-footer-nav {
+            margin-top: 12px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #94a3b8;
+            font-size: 12px;
+        }
+
+        /* 16:9 SLIDE CARD */
+        .slide-card {
+            width: 780px;
+            height: 438px; /* 16:9 Aspect Ratio */
+            border-radius: 10px;
+            box-shadow: 0 20px 35px -5px rgba(0, 0, 0, 0.7);
+            padding: 38px 46px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            transition: background 0.25s, color 0.25s;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+
+        /* THEMES */
+        .theme-classic { background: #ffffff; color: #0f172a; }
+        .theme-classic .slide-sub { color: #475569; }
+        .theme-classic .slide-box-border { border-color: #e2e8f0; }
+
+        .theme-midnight { background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%); color: #ffffff; }
+        .theme-midnight .slide-sub { color: #93c5fd; }
+        .theme-midnight .slide-box-border { border-color: #3b82f6; }
+
+        .theme-blackboard { background: radial-gradient(circle, #065f46 0%, #022c22 100%); color: #f1f5f9; }
+        .theme-blackboard .slide-sub { color: #86efac; }
+        .theme-blackboard .slide-box-border { border-color: #10b981; }
+
+        .theme-sunset { background: linear-gradient(135deg, #4c1d95 0%, #be185d 100%); color: #ffffff; }
+        .theme-sunset .slide-sub { color: #fbcfe8; }
+        .theme-sunset .slide-box-border { border-color: #ec4899; }
+
+        .theme-minimal-dark { background: #18181b; color: #fafafa; }
+        .theme-minimal-dark .slide-sub { color: #a1a1aa; }
+        .theme-minimal-dark .slide-box-border { border-color: #3f3f46; }
+
+        /* EDITABLE ELEMENTS */
+        .editable {
+            outline: none;
+            border: 1px dashed transparent;
+            border-radius: 4px;
+            padding: 2px 4px;
+            transition: border-color 0.15s;
+        }
+        .editable:hover { border-color: rgba(245, 158, 11, 0.4); }
+        .editable:focus { border-color: #f59e0b; background: rgba(245, 158, 11, 0.05); }
+
+        /* LAYOUTS */
+        /* 1. Title Layout */
+        .layout-title {
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            gap: 16px;
+        }
+        .layout-title .slide-title { font-size: 42px; font-weight: 800; line-height: 1.15; width: 100%; }
+        .layout-title .slide-sub { font-size: 20px; font-weight: 500; width: 100%; }
+        .layout-title .slide-author { font-size: 14px; opacity: 0.8; margin-top: 18px; }
+
+        /* 2. Content Layout */
+        .layout-content {
+            justify-content: flex-start;
+            gap: 16px;
+        }
+        .layout-content .slide-title { font-size: 30px; font-weight: 700; border-bottom: 2px solid rgba(148, 163, 184, 0.3); padding-bottom: 8px; }
+        .layout-content .slide-body { font-size: 18px; line-height: 1.6; flex: 1; overflow-y: auto; }
+
+        /* 3. Two Columns Layout */
+        .layout-columns {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .layout-columns .slide-title { font-size: 30px; font-weight: 700; border-bottom: 2px solid rgba(148, 163, 184, 0.3); padding-bottom: 8px; }
+        .columns-wrap { display: flex; gap: 20px; flex: 1; overflow: hidden; }
+        .col-half { flex: 1; font-size: 16px; line-height: 1.5; overflow-y: auto; padding: 6px; border-radius: 6px; background: rgba(0,0,0,0.05); }
+
+        /* 4. Image & Text Layout */
+        .layout-image-text {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .layout-image-text .slide-title { font-size: 28px; font-weight: 700; border-bottom: 2px solid rgba(148, 163, 184, 0.3); padding-bottom: 6px; }
+        .img-text-grid { display: flex; gap: 20px; flex: 1; align-items: center; overflow: hidden; }
+        .img-box {
+            flex: 1;
+            height: 100%;
+            max-height: 280px;
+            border: 2px dashed #64748b;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+            background: rgba(0,0,0,0.08);
+            cursor: pointer;
+        }
+        .img-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+        }
+        .img-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: #94a3b8;
+            padding: 12px;
+            text-align: center;
+        }
+        .img-box-actions {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            display: none;
+            gap: 4px;
+            z-index: 5;
+        }
+        .img-box:hover .img-box-actions { display: flex; }
+        .img-text-content { flex: 1; font-size: 17px; line-height: 1.6; overflow-y: auto; }
+
+        /* 5. Blank Layout */
+        .layout-blank {
+            justify-content: flex-start;
+        }
+        .layout-blank .slide-free {
+            flex: 1;
+            font-size: 22px;
+            line-height: 1.6;
+            overflow-y: auto;
+        }
+
+        /* MODAL */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            width: 440px;
+            padding: 20px;
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);
+        }
+        .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 14px; color: #f8fafc; }
+        .modal-field { margin-bottom: 14px; }
+        .modal-field label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px; }
+        .modal-field input[type="text"], .modal-field input[type="file"] {
+            width: 100%;
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: white;
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+        /* PRESENTATION MODE OVERLAY */
+        .presentation-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: #000000;
+            z-index: 99999;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        .presentation-overlay.show { display: flex; }
+        .pres-card {
+            width: 90vw;
+            height: calc(90vw * 9 / 16);
+            max-height: 88vh;
+            max-width: calc(88vh * 16 / 9);
+            border-radius: 12px;
+            padding: 50px 60px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+            box-sizing: border-box;
+        }
+        .pres-card .slide-title { font-size: 46px; font-weight: 800; line-height: 1.2; }
+        .pres-card .slide-sub { font-size: 26px; line-height: 1.5; }
+        .pres-card .slide-body { font-size: 26px; line-height: 1.7; }
+        .pres-card .slide-author { font-size: 18px; margin-top: 24px; }
+        .pres-card .col-half { font-size: 24px; line-height: 1.6; }
+        .pres-card .img-text-content { font-size: 24px; line-height: 1.6; }
+        .pres-card .slide-free { font-size: 32px; line-height: 1.6; }
+
+        .pres-controls-bar {
+            position: absolute;
+            bottom: 16px;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            padding: 8px 18px;
+            border-radius: 30px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            color: white;
+            font-size: 13px;
+            opacity: 0.2;
+            transition: opacity 0.2s;
+            z-index: 10000;
+        }
+        .pres-controls-bar:hover { opacity: 1; }
+        .pres-btn {
+            background: transparent;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        .pres-btn:hover { background: rgba(255,255,255,0.2); }
+
+        /* PRINT STYLES */
+        @media print {
+            body { background: white !important; color: black !important; height: auto !important; overflow: visible !important; }
+            .slides-header, .toolbar, .slides-sidebar, .stage-footer-nav, .presentation-overlay, .modal-overlay { display: none !important; }
+            .slides-body, .slide-stage { padding: 0 !important; margin: 0 !important; background: transparent !important; display: block !important; }
+            .slide-card {
+                page-break-after: always;
+                width: 100vw !important;
+                height: 56.25vw !important; /* 16:9 */
+                box-shadow: none !important;
+                border: 1px solid #ddd;
+                border-radius: 0 !important;
+                margin: 0 0 20px 0 !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- TOP HEADER -->
+    <div class="slides-header">
+        <div class="header-left">
+            <span class="app-badge">SLIDES</span>
+            <input type="text" id="pres-title" class="pres-title-input" value="Presentación de Ciencias" title="Título de la presentación">
+        </div>
+        <div class="header-actions">
+            <button class="btn btn-warning" onclick="startPresentation()" title="Presentar en Pantalla Completa (F5)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Presentar
+            </button>
+            <button class="btn btn-secondary" onclick="saveLocally()" title="Guardar presentación en archivo">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                Guardar
+            </button>
+            <button class="btn btn-secondary" onclick="openPresentationFile()" title="Abrir archivo guardado">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                Abrir
+            </button>
+            <button class="btn btn-secondary" onclick="window.print()" title="Imprimir diapositivas o guardar en PDF">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                PDF / Imprimir
+            </button>
+            <button class="btn btn-success" onclick="turnInSlides()" title="Enviar trabajo terminado al profesor">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                Entregar
+            </button>
+        </div>
+    </div>
+
+    <!-- FORMATTING TOOLBAR -->
+    <div class="toolbar">
+        <!-- Layout & Themes -->
+        <div class="tool-group">
+            <span class="tool-label">Diseño:</span>
+            <select id="select-layout" class="tool-select" onchange="changeLayout(this.value)">
+                <option value="title">Portada (Título)</option>
+                <option value="content" selected>Título y Contenido</option>
+                <option value="columns">2 Columnas (Comparar)</option>
+                <option value="image-text">Título e Imagen</option>
+                <option value="blank">En Blanco</option>
+            </select>
+        </div>
+
+        <div class="tool-group">
+            <span class="tool-label">Tema:</span>
+            <select id="select-theme" class="tool-select" onchange="changeTheme(this.value)">
+                <option value="classic">☀️ Blanco Clásico</option>
+                <option value="midnight" selected>🌌 Azul Medianoche</option>
+                <option value="blackboard">🌿 Pizarra Escolar</option>
+                <option value="sunset">🌅 Atardecer</option>
+                <option value="minimal-dark">🖤 Minimal Dark</option>
+            </select>
+        </div>
+
+        <!-- Typography & Fonts -->
+        <div class="tool-group">
+            <select id="font-family" class="tool-select" onchange="formatDoc('fontName', this.value)">
+                <option value="Inter">Inter</option>
+                <option value="Roboto">Roboto</option>
+                <option value="Arial">Arial</option>
+                <option value="Times New Roman">Times New Roman</option>
+                <option value="Georgia">Georgia</option>
+                <option value="Comic Neue">Comic Neue</option>
+                <option value="Source Code Pro">Monospace</option>
+            </select>
+            <select id="font-size" class="tool-select" onchange="formatDoc('fontSize', this.value)">
+                <option value="2">Pequeño</option>
+                <option value="3" selected>Normal</option>
+                <option value="4">Mediano</option>
+                <option value="5">Grande</option>
+                <option value="6">Muy Grande</option>
+                <option value="7">Gigante</option>
+            </select>
+        </div>
+
+        <!-- Styles -->
+        <div class="tool-group">
+            <button class="tool-btn" onclick="formatDoc('bold')" title="Negrita (Ctrl+B)"><b>B</b></button>
+            <button class="tool-btn" onclick="formatDoc('italic')" title="Cursiva (Ctrl+I)"><i>I</i></button>
+            <button class="tool-btn" onclick="formatDoc('underline')" title="Subrayado (Ctrl+U)"><u>U</u></button>
+        </div>
+
+        <!-- Colors -->
+        <div class="tool-group">
+            <label class="color-picker-wrap tool-btn" title="Color de Texto">
+                <span style="border-bottom: 3px solid #ef4444; font-weight: bold;">A</span>
+                <input type="color" onchange="formatDoc('foreColor', this.value)">
+            </label>
+            <label class="color-picker-wrap tool-btn" title="Resaltar Texto">
+                <span style="background: #fde047; color: #000; padding: 0 3px; border-radius: 2px; font-weight: bold;">A</span>
+                <input type="color" value="#fde047" onchange="formatDoc('hiliteColor', this.value)">
+            </label>
+        </div>
+
+        <!-- Alignments & Lists -->
+        <div class="tool-group">
+            <button class="tool-btn" onclick="formatDoc('justifyLeft')" title="Alinear a la Izquierda">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="21" y1="6" x2="3" y2="6"></line><line x1="15" y1="12" x2="3" y2="12"></line><line x1="19" y1="18" x2="3" y2="18"></line></svg>
+            </button>
+            <button class="tool-btn" onclick="formatDoc('justifyCenter')" title="Centrar">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="6"></line><line x1="21" y1="12" x2="3" y2="12"></line><line x1="18" y1="18" x2="6" y2="18"></line></svg>
+            </button>
+            <button class="tool-btn" onclick="formatDoc('justifyRight')" title="Alinear a la Derecha">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="12" x2="9" y2="12"></line><line x1="21" y1="18" x2="5" y2="18"></line></svg>
+            </button>
+            <button class="tool-btn" onclick="formatDoc('insertUnorderedList')" title="Viñetas">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="9" y1="6" x2="20" y2="6"></line><line x1="9" y1="12" x2="20" y2="12"></line><line x1="9" y1="18" x2="20" y2="18"></line><circle cx="4" cy="6" r="1.5"></circle><circle cx="4" cy="12" r="1.5"></circle><circle cx="4" cy="18" r="1.5"></circle></svg>
+            </button>
+        </div>
+
+        <!-- Insert Images -->
+        <div class="tool-group" style="border-right:none;">
+            <button class="btn btn-secondary" onclick="openImageModal()" style="padding: 3px 8px; font-size: 11px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                Insertar Imagen
+            </button>
+        </div>
+    </div>
+
+    <!-- MAIN BODY -->
+    <div class="slides-body">
+        <!-- SIDEBAR -->
+        <div class="slides-sidebar">
+            <div class="sidebar-actions">
+                <button class="btn btn-warning" onclick="addSlide()" style="flex:1; justify-content:center; font-size:11px;" title="Nueva Diapositiva">+ Diapositiva</button>
+            </div>
+            <div style="display:flex; gap:4px; margin-bottom: 6px;">
+                <button class="btn btn-secondary" onclick="duplicateCurrentSlide()" style="flex:1; justify-content:center; font-size:10px;" title="Duplicar Diapositiva">📋 Duplicar</button>
+                <button class="btn btn-danger" onclick="deleteCurrentSlide()" style="padding:4px 8px; font-size:10px;" title="Eliminar Diapositiva">🗑️</button>
+            </div>
+            <div id="thumbs-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+        </div>
+
+        <!-- STAGE -->
+        <div class="slide-stage" id="slide-stage">
+            <div id="active-slide-card" class="slide-card theme-midnight layout-content">
+                <!-- RENDER DINÁMICO DE LA DIAPOSITIVA ACTIVA -->
+            </div>
+
+            <div class="stage-footer-nav">
+                <button class="btn btn-secondary" onclick="loadSlide(currentIdx - 1)" style="padding:4px 8px; font-size:11px;">◀ Anterior</button>
+                <span id="slide-counter-text">Diapositiva 1 de 3</span>
+                <button class="btn btn-secondary" onclick="loadSlide(currentIdx + 1)" style="padding:4px 8px; font-size:11px;">Siguiente ▶</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL INSERTAR IMAGEN -->
+    <div id="modal-image" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-title">Insertar Imagen en Diapositiva</div>
+            <div class="modal-field">
+                <label>1. Subir imagen desde el equipo (PNG, JPG, SVG, WebP):</label>
+                <input type="file" id="img-file-input" accept="image/*" onchange="handleImageFileUpload(event)">
+            </div>
+            <div class="modal-field">
+                <label>2. O pegar dirección web (URL) de la imagen:</label>
+                <input type="text" id="img-url-input" placeholder="https://ejemplo.com/foto.jpg">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeImageModal()">Cancelar</button>
+                <button class="btn btn-primary" onclick="confirmInsertImageUrl()">Insertar URL</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- OVERLAY MODO PRESENTACIÓN PANTALLA COMPLETA -->
+    <div id="presentation-overlay" class="presentation-overlay">
+        <div id="pres-canvas" class="pres-card theme-midnight layout-content">
+            <!-- CONTENIDO DE PRESENTACIÓN -->
+        </div>
+
+        <div class="pres-controls-bar">
+            <button class="pres-btn" onclick="presPrev()" title="Anterior (Flecha Izq)">◀</button>
+            <span id="pres-counter" style="font-weight:600;">1 / 3</span>
+            <button class="pres-btn" onclick="presNext()" title="Siguiente (Espacio o Flecha Der)">▶</button>
+            <span style="opacity:0.4;">|</span>
+            <button class="pres-btn" onclick="stopPresentation()" title="Salir (ESC)">✕ Salir</button>
+        </div>
+    </div>
+
+    <!-- INPUT OCULTO PARA ABRIR JSON -->
+    <input type="file" id="file-open-input" accept=".json" style="display:none;" onchange="handleOpenFile(event)">
+
+    <script>
+        // ESTADO DE DIAPOSITIVAS
+        let slides = [
+            {
+                layout: 'title',
+                theme: 'midnight',
+                title: 'Energías Renovables en el Mundo',
+                subtitle: 'Investigación Científica y Sostenibilidad Ambiental',
+                author: 'Presentado por: Equipo de Ciencias • Laboratorio Digital',
+                body: '',
+                col1: '',
+                col2: '',
+                imageUrl: ''
+            },
+            {
+                layout: 'content',
+                theme: 'midnight',
+                title: '¿Qué es la Energía Solar?',
+                subtitle: '',
+                author: '',
+                body: '<ul><li>La <b>energía solar</b> es una fuente renovable obtenida a partir del aprovechamiento de la radiación electromagnética procedente del Sol.</li><li>Es una energía <i>limpia, inagotable y sostenible</i>.</li><li>Permite generar electricidad a través de paneles fotovoltaicos sin emitir gases de efecto invernadero.</li></ul>',
+                col1: '',
+                col2: '',
+                imageUrl: ''
+            },
+            {
+                layout: 'image-text',
+                theme: 'midnight',
+                title: 'Ventajas de los Paneles Fotovoltaicos',
+                subtitle: '',
+                author: '',
+                body: '',
+                col1: '',
+                col2: '',
+                imgText: '<ul><li><b>Reducción de costos</b> a largo plazo en escuelas y hogares.</li><li><b>Cero emisiones</b> de CO2 durante su funcionamiento.</li><li>Mantenimiento simple y vida útil superior a 25 años.</li></ul>',
+                imageUrl: 'https://images.unsplash.com/photo-1509391365360-2e959784a276?w=600&auto=format&fit=crop&q=80'
+            }
+        ];
+
+        let currentIdx = 0;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderThumbs();
+            loadSlide(0);
+
+            // Drag & Drop de imágenes directo a la diapositiva
+            const stage = document.getElementById('slide-stage');
+            stage.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+            stage.addEventListener('drop', handleFileDrop);
+
+            // Pegar con Ctrl+V directo
+            document.addEventListener('paste', handlePasteImage);
+        });
+
+        // FORMATEO DE TEXTO
+        function formatDoc(cmd, val = null) {
+            document.execCommand(cmd, false, val);
+            saveActiveSlideFromDOM();
+        }
+
+        // CARGA Y RENDERIZADO DE DIAPOSITIVA
+        function loadSlide(idx) {
+            if (slides.length === 0) {
+                addSlide();
+                return;
+            }
+            currentIdx = Math.max(0, Math.min(slides.length - 1, idx));
+            const s = slides[currentIdx];
+
+            document.getElementById('select-layout').value = s.layout || 'content';
+            document.getElementById('select-theme').value = s.theme || 'midnight';
+            document.getElementById('slide-counter-text').innerText = `Diapositiva ${currentIdx + 1} de ${slides.length}`;
+
+            renderSlideCard(s, document.getElementById('active-slide-card'), true);
+            renderThumbs();
+        }
+
+        function renderSlideCard(s, container, isEditable) {
+            container.className = `slide-card theme-${s.theme || 'midnight'} layout-${s.layout || 'content'}`;
+
+            if (s.layout === 'title') {
+                container.innerHTML = `
+                    <div class="slide-title ${isEditable ? 'editable' : ''}" ${isEditable ? 'contenteditable="true"' : ''} data-field="title">${s.title || 'Título de la Presentación'}</div>
+                    <div class="slide-sub ${isEditable ? 'editable' : ''}" ${isEditable ? 'contenteditable="true"' : ''} data-field="subtitle">${s.subtitle || 'Subtítulo o descripción'}</div>
+                    <div class="slide-author ${isEditable ? 'editable' : ''}" ${isEditable ? 'contenteditable="true"' : ''} data-field="author">${s.author || 'Nombre del estudiante'}</div>
+                `;
+            } else if (s.layout === 'content') {
+                container.innerHTML = `
+                    <div class="slide-title ${isEditable ? 'editable' : ''}" ${isEditable ? 'contenteditable="true"' : ''} data-field="title">${s.title || 'Título de la Diapositiva'}</div>
+                    <div class="slide-body ${isEditable ? 'editable' : ''}" ${isEditable ? 'contenteditable="true"' : ''} data-field="body">${s.body || '<p>Escribe aquí el contenido principal...</p>'}</div>
+                `;
+            } else if (s.layout === 'columns') {
+                container.innerHTML = `
+                    <div class="slide-title ${isEditable ? 'editable' : ''}" ${isEditable ? 'contenteditable="true"' : ''} data-field="title">${s.title || 'Título Comparativo'}</div>
+                    <div class="columns-wrap">
+                        <div class="col-half ${isEditable ? 'editable' : ''}" ${isEditable ? 'contenteditable="true"' : ''} data-field="col1">${s.col1 || '<h4>Aspecto 1</h4><p>Puntos a favor o detalles clave...</p>'}</div>
+                        <div class="col-half ${isEditable ? 'editable' : ''}" ${isEditable ? 'contenteditable="true"' : ''} data-field="col2">${s.col2 || '<h4>Aspecto 2</h4><p>Puntos de análisis o diferencias...</p>'}</div>
+                    </div>
+                `;
+            } else if (s.layout === 'image-text') {
+                const imgHtml = s.imageUrl ? `<img src="${s.imageUrl}" alt="Slide image">` : `
+                    <div class="img-placeholder" onclick="openImageModal()">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                        <span>Haz clic para añadir una imagen o arrástrala aquí</span>
+                    </div>
+                `;
+                container.innerHTML = `
+                    <div class="slide-title ${isEditable ? 'editable' : ''}" ${isEditable ? 'contenteditable="true"' : ''} data-field="title">${s.title || 'Título con Imagen'}</div>
+                    <div class="img-text-grid">
+                        <div class="img-box">
+                            ${imgHtml}
+                            ${isEditable && s.imageUrl ? `
+                                <div class="img-box-actions">
+                                    <button class="btn btn-secondary" onclick="openImageModal()" style="padding:2px 6px; font-size:10px;">Cambiar</button>
+                                    <button class="btn btn-danger" onclick="removeSlideImage()" style="padding:2px 6px; font-size:10px;">✕</button>
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div class="img-text-content ${isEditable ? 'editable' : ''}" ${isEditable ? 'contenteditable="true"' : ''} data-field="imgText">${s.imgText || '<p>Explicación sobre la imagen o gráfico presentado...</p>'}</div>
+                    </div>
+                `;
+            } else if (s.layout === 'blank') {
+                container.innerHTML = `
+                    <div class="slide-free ${isEditable ? 'editable' : ''}" ${isEditable ? 'contenteditable="true"' : ''} data-field="body">${s.body || '<p>Lienzo en blanco. Puedes añadir texto con formato, pegar imágenes o tablas...</p>'}</div>
+                `;
+            }
+
+            if (isEditable) {
+                container.querySelectorAll('.editable').forEach(el => {
+                    el.addEventListener('input', () => {
+                        saveActiveSlideFromDOM();
+                        updateThumbPreview(currentIdx);
+                    });
+                });
+            }
+        }
+
+        function saveActiveSlideFromDOM() {
+            const card = document.getElementById('active-slide-card');
+            const s = slides[currentIdx];
+            if (!s || !card) return;
+
+            card.querySelectorAll('.editable').forEach(el => {
+                const f = el.dataset.field;
+                if (f) s[f] = el.innerHTML;
+            });
+        }
+
+        function updateThumbPreview(idx) {
+            const s = slides[idx];
+            const tEl = document.getElementById(`thumb-title-${idx}`);
+            if (tEl) tEl.innerText = (extractText(s.title) || 'Diapositiva').substring(0, 20);
+        }
+
+        function extractText(html) {
+            if (!html) return '';
+            const temp = document.createElement('div');
+            temp.innerHTML = html;
+            return temp.textContent || temp.innerText || '';
+        }
+
+        // GESTIÓN DE MINIATURAS (THUMBNAILS)
+        function renderThumbs() {
+            const list = document.getElementById('thumbs-list');
+            list.innerHTML = '';
+
+            slides.forEach((s, idx) => {
+                const card = document.createElement('div');
+                card.className = `thumb-card ${idx === currentIdx ? 'active' : ''}`;
+                card.onclick = () => loadSlide(idx);
+
+                const titleText = (extractText(s.title) || `Diapositiva ${idx + 1}`).substring(0, 18);
+                const snippet = (extractText(s.body || s.subtitle || s.imgText || s.col1) || '').substring(0, 45);
+
+                card.innerHTML = `
+                    <div class="thumb-top">
+                        <span>#${idx + 1}</span>
+                        <span style="font-size:9px; text-transform:uppercase;">${s.layout || 'content'}</span>
+                    </div>
+                    <div class="thumb-preview">
+                        <span id="thumb-title-${idx}" class="thumb-preview-title">${titleText}</span>
+                        <span class="thumb-preview-snippet">${snippet}</span>
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        // MANIPULACIÓN DE DIAPOSITIVAS
+        function addSlide() {
+            slides.push({
+                layout: 'content',
+                theme: slides[currentIdx]?.theme || 'midnight',
+                title: 'Nueva Diapositiva',
+                subtitle: '',
+                author: '',
+                body: '<ul><li>Nuevo punto de exposición...</li></ul>',
+                col1: '',
+                col2: '',
+                imageUrl: ''
+            });
+            loadSlide(slides.length - 1);
+        }
+
+        function duplicateCurrentSlide() {
+            const curr = slides[currentIdx];
+            const cloned = JSON.parse(JSON.stringify(curr));
+            cloned.title += ' (Copia)';
+            slides.splice(currentIdx + 1, 0, cloned);
+            loadSlide(currentIdx + 1);
+        }
+
+        function deleteCurrentSlide() {
+            if (slides.length <= 1) {
+                alert('No puedes eliminar la única diapositiva.');
+                return;
+            }
+            if (confirm(`¿Eliminar la diapositiva #${currentIdx + 1}?`)) {
+                slides.splice(currentIdx, 1);
+                loadSlide(Math.min(currentIdx, slides.length - 1));
+            }
+        }
+
+        function changeLayout(newLayout) {
+            saveActiveSlideFromDOM();
+            slides[currentIdx].layout = newLayout;
+            loadSlide(currentIdx);
+        }
+
+        function changeTheme(newTheme) {
+            slides[currentIdx].theme = newTheme;
+            loadSlide(currentIdx);
+        }
+
+        // GESTIÓN DE IMÁGENES
+        function openImageModal() {
+            document.getElementById('modal-image').classList.add('show');
+            document.getElementById('img-url-input').value = '';
+            document.getElementById('img-file-input').value = '';
+        }
+
+        function closeImageModal() {
+            document.getElementById('modal-image').classList.remove('show');
+        }
+
+        function confirmInsertImageUrl() {
+            const url = document.getElementById('img-url-input').value.trim();
+            if (url) {
+                applyImageToCurrentSlide(url);
+                closeImageModal();
+            }
+        }
+
+        function handleImageFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                applyImageToCurrentSlide(event.target.result);
+                closeImageModal();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function applyImageToCurrentSlide(imgSrc) {
+            const s = slides[currentIdx];
+            s.imageUrl = imgSrc;
+            if (s.layout !== 'image-text') {
+                s.layout = 'image-text';
+                document.getElementById('select-layout').value = 'image-text';
+            }
+            loadSlide(currentIdx);
+        }
+
+        function removeSlideImage() {
+            slides[currentIdx].imageUrl = '';
+            loadSlide(currentIdx);
+        }
+
+        function handleFileDrop(e) {
+            e.preventDefault();
+            const files = e.dataTransfer.files;
+            if (files.length > 0 && files[0].type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (event) => applyImageToCurrentSlide(event.target.result);
+                reader.readAsDataURL(files[0]);
+            }
+        }
+
+        function handlePasteImage(e) {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    const blob = items[i].getAsFile();
+                    const reader = new FileReader();
+                    reader.onload = (event) => applyImageToCurrentSlide(event.target.result);
+                    reader.readAsDataURL(blob);
+                    break;
+                }
+            }
+        }
+
+        // MODO PRESENTACIÓN (PANTALLA COMPLETA)
+        let presIdx = 0;
+
+        function startPresentation() {
+            saveActiveSlideFromDOM();
+            presIdx = currentIdx;
+            document.getElementById('presentation-overlay').classList.add('show');
+            showPresSlide(presIdx);
+        }
+
+        function stopPresentation() {
+            document.getElementById('presentation-overlay').classList.remove('show');
+            loadSlide(presIdx);
+        }
+
+        function showPresSlide(idx) {
+            presIdx = Math.max(0, Math.min(slides.length - 1, idx));
+            const s = slides[presIdx];
+            const canvas = document.getElementById('pres-canvas');
+            document.getElementById('pres-counter').innerText = `${presIdx + 1} / ${slides.length}`;
+            renderSlideCard(s, canvas, false);
+        }
+
+        function presNext() {
+            if (presIdx < slides.length - 1) showPresSlide(presIdx + 1);
+            else stopPresentation();
+        }
+
+        function presPrev() {
+            if (presIdx > 0) showPresSlide(presIdx - 1);
+        }
+
+        // Control de teclado para presentación y atajos
+        document.addEventListener('keydown', (e) => {
+            const pres = document.getElementById('presentation-overlay');
+            if (pres.classList.contains('show')) {
+                if (e.key === 'Escape') stopPresentation();
+                else if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown' || e.key === 'Enter') presNext();
+                else if (e.key === 'ArrowLeft' || e.key === 'PageUp' || e.key === 'Backspace') presPrev();
+            } else {
+                if (e.key === 'F5') {
+                    e.preventDefault();
+                    startPresentation();
+                } else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                    e.preventDefault();
+                    saveLocally();
+                }
+            }
+        });
+
+        // GUARDAR Y ABRIR LOCALMENTE
+        async function saveLocally() {
+            saveActiveSlideFromDOM();
+            const title = document.getElementById('pres-title').value.trim() || 'presentacion';
+            const filename = `${title.replace(/[^a-zA-Z0-9_\-]/g, '_')}.json`;
+            const payload = {
+                title,
+                updatedAt: new Date().toISOString(),
+                slides
+            };
+            const content = JSON.stringify(payload, null, 2);
+
+            if (window.parent && window.parent.labdeskAPI) {
+                const res = await window.parent.labdeskAPI.files.saveLocal(filename, content);
+                if (res.success) {
+                    alert(`✅ Presentación guardada exitosamente en:\n${res.filePath}`);
+                }
+            } else {
+                // Descarga directa en navegador web común
+                const blob = new Blob([content], { type: 'application/json' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = filename;
+                a.click();
+            }
+        }
+
+        function openPresentationFile() {
+            document.getElementById('file-open-input').click();
+        }
+
+        function handleOpenFile(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const data = JSON.parse(event.target.result);
+                    if (data.slides && Array.isArray(data.slides)) {
+                        slides = data.slides;
+                        if (data.title) document.getElementById('pres-title').value = data.title;
+                        loadSlide(0);
+                        alert('✅ Presentación cargada exitosamente.');
+                    } else {
+                        alert('El archivo seleccionado no tiene el formato válido de Mini Slides.');
+                    }
+                } catch (err) {
+                    alert('Error al leer el archivo JSON: ' + err.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // ENTREGAR AL PROFESOR
+        async function turnInSlides() {
+            saveActiveSlideFromDOM();
+            const student = prompt('Ingresa tu nombre y apellido para la entrega al profesor:');
+            if (!student) return;
+
+            const title = document.getElementById('pres-title').value.trim() || 'presentacion';
+            const filename = `${title.replace(/[^a-zA-Z0-9_\-]/g, '_')}_${student.replace(/[^a-zA-Z0-9_\-]/g, '_')}.json`;
+            const payload = {
+                title,
+                student,
+                timestamp: new Date().toISOString(),
+                slidesCount: slides.length,
+                slides
+            };
+            const content = JSON.stringify(payload, null, 2);
+
+            if (window.parent && window.parent.labdeskAPI) {
+                const res = await window.parent.labdeskAPI.turnIn.submitFile({
+                    filename,
+                    content,
+                    appType: 'Mini Slides',
+                    studentName: student,
+                    notes: `Presentación "${title}" con ${slides.length} diapositivas`
+                });
+
+                if (res.success) {
+                    alert('🎉 ¡Tu presentación ha sido entregada exitosamente al profesor!');
+                } else {
+                    alert('Error en la entrega: ' + (res.error || 'Servidor no disponible'));
+                }
+            } else {
+                alert(`(Modo sin servidor) Trabajo listo para entregar por ${student}: ${filename}`);
+            }
+        }
+    </script>
+</body>
+</html>

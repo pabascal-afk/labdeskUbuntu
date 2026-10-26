@@ -1,0 +1,457 @@
+:root {
+    --bg-desktop: linear-gradient(135deg, #0b1329 0%, #172554 50%, #0f172a 100%);
+    --taskbar-bg: rgba(15, 23, 42, 0.88);
+    --taskbar-border: rgba(255, 255, 255, 0.1);
+    --window-bg: #1e293b;
+    --window-border: #334155;
+    --text-primary: #f8fafc;
+    --text-muted: #94a3b8;
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none;
+    font-family: 'Inter', system-ui, sans-serif;
+}
+
+body, html {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.desktop-workspace {
+    width: 100vw;
+    height: 100vh;
+    background: var(--bg-desktop);
+    background-size: cover;
+    background-position: center;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ICONOS DEL ESCRITORIO */
+.desktop-icons-grid {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    bottom: 60px;
+    display: flex;
+    flex-direction: column;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-content: flex-start;
+    z-index: 10;
+}
+
+.desktop-shortcut {
+    width: 84px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 4px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 0.15s, transform 0.15s;
+}
+
+.desktop-shortcut:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: scale(1.04);
+}
+
+.shortcut-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+}
+
+.shortcut-icon svg {
+    width: 28px;
+    height: 28px;
+    display: block;
+}
+
+.item-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.item-icon svg {
+    width: 18px;
+    height: 18px;
+    display: block;
+}
+
+.start-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.icon-writer { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+.icon-calc { background: linear-gradient(135deg, #10b981, #047857); }
+.icon-slides { background: linear-gradient(135deg, #f59e0b, #b45309); }
+.icon-browser { background: linear-gradient(135deg, #06b6d4, #0e7490); }
+.icon-files { background: linear-gradient(135deg, #6366f1, #4338ca); }
+.icon-google { background: rgba(255, 255, 255, 0.9); }
+
+.shortcut-name {
+    color: var(--text-primary);
+    font-size: 11px;
+    font-weight: 500;
+    text-align: center;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    word-break: break-word;
+}
+
+.shortcut-separator {
+    width: 60px;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.15);
+    margin: 4px auto;
+}
+
+/* CONTENEDOR DE VENTANAS */
+.windows-container {
+    position: absolute;
+    inset: 0 0 48px 0;
+    pointer-events: none;
+    z-index: 20;
+}
+
+.window {
+    position: absolute;
+    background: var(--window-bg);
+    border: 1px solid var(--window-border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    pointer-events: auto;
+    min-width: 400px;
+    min-height: 250px;
+}
+
+.window-header {
+    background: #0f172a;
+    padding: 8px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--window-border);
+    cursor: move;
+}
+
+.window-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.window-controls {
+    display: flex;
+    gap: 6px;
+}
+
+.win-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+}
+.win-btn:hover { background: rgba(255, 255, 255, 0.1); color: white; }
+.win-btn-close:hover { background: #ef4444; color: white; }
+
+.window-body {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    background: #1e293b;
+}
+
+.window-iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+/* BARRA DE TAREAS */
+.taskbar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 48px;
+    background: var(--taskbar-bg);
+    border-top: 1px solid var(--taskbar-border);
+    backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    z-index: 100;
+}
+
+.btn-start {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #1e293b;
+    border: 1px solid var(--taskbar-border);
+    color: white;
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.btn-start:hover { background: var(--accent); }
+
+.taskbar-apps {
+    flex: 1;
+    display: flex;
+    gap: 6px;
+    margin: 0 16px;
+    overflow-x: auto;
+}
+
+.taskbar-item {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid transparent;
+    color: var(--text-primary);
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 160px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.taskbar-item.active {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: var(--accent);
+}
+
+.taskbar-tray {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.tray-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    position: relative;
+    font-size: 12px;
+    color: var(--text-primary);
+}
+
+.tray-btn {
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+}
+.tray-btn:hover { background: rgba(255, 255, 255, 0.1); }
+
+.audio-popup {
+    display: none;
+    position: absolute;
+    bottom: 54px;
+    right: 0;
+    background: #0f172a;
+    border: 1px solid var(--taskbar-border);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+    flex-direction: column;
+    gap: 8px;
+    width: 180px;
+}
+.audio-popup.show { display: flex; }
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+.dot-online { background: #10b981; }
+.dot-offline { background: #ef4444; }
+
+/* MENÚ DE INICIO */
+.start-menu {
+    display: none;
+    position: absolute;
+    bottom: 56px;
+    left: 12px;
+    width: 320px;
+    background: #0f172a;
+    border: 1px solid var(--taskbar-border);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+    flex-direction: column;
+    z-index: 101;
+    overflow: hidden;
+}
+.start-menu.show { display: flex; }
+
+.start-menu-header {
+    padding: 16px;
+    background: #1e293b;
+    border-bottom: 1px solid var(--taskbar-border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.user-avatar { font-size: 28px; }
+.machine-label { font-size: 11px; color: var(--text-muted); }
+
+.start-menu-body {
+    padding: 12px;
+    max-height: 380px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.menu-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    padding: 8px 8px 4px;
+}
+
+.start-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-primary);
+}
+.start-menu-item:hover { background: rgba(255, 255, 255, 0.08); }
+.start-menu-item p { font-size: 11px; color: var(--text-muted); }
+
+.start-menu-footer {
+    padding: 10px 14px;
+    background: #131d31;
+    border-top: 1px solid var(--taskbar-border);
+}
+.btn-clear-session {
+    width: 100%;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    color: #fca5a5;
+    padding: 8px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 600;
+}
+.btn-clear-session:hover { background: #ef4444; color: white; }
+
+/* LOCK SCREEN */
+.lockscreen {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.96);
+    backdrop-filter: blur(16px);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+}
+.lockscreen.show { display: flex; }
+
+.lockscreen-card {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: var(--radius-lg);
+    padding: 32px;
+    width: 380px;
+    text-align: center;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+}
+.lock-logo { font-size: 48px; margin-bottom: 12px; }
+.lock-subtitle { color: var(--text-muted); font-size: 13px; margin: 8px 0 20px; }
+
+.pin-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+.pin-input {
+    width: 180px;
+    height: 40px;
+    background: #0f172a;
+    border: 1px solid var(--accent);
+    color: white;
+    text-align: center;
+    font-size: 20px;
+    letter-spacing: 8px;
+    border-radius: var(--radius-sm);
+}
+.pin-keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    width: 200px;
+}
+.key-btn {
+    height: 44px;
+    background: #0f172a;
+    border: 1px solid #334155;
+    color: white;
+    font-size: 16px;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+.key-btn:hover { background: #334155; }
+.key-ok { background: #10b981; }
+.key-ok:hover { background: #059669; }
+.key-clear { background: #ef4444; }
+.key-clear:hover { background: #dc2626; }

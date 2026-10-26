@@ -1,0 +1,40 @@
+# ==============================================================================
+# FAI Package Config: LABDESK (Debian 12 Bookworm)
+# Paquetes requeridos para el quiosco educativo ligero LabDesk
+# ==============================================================================
+
+PACKAGES install
+
+# Kernel y arranque
+linux-image-amd64
+grub-efi-amd64-signed
+grub-pc
+
+# Servidor Gráfico mínimo y Gestor de Ventanas
+xorg
+openbox
+lightdm
+
+# Audio Subsystem (PipeWire / PulseAudio)
+pipewire
+pipewire-pulse
+wireplumber
+pamixer
+pulseaudio-utils
+
+# Control y utilidades de automatización
+xdotool
+network-manager
+curl
+wget
+git
+sudo
+unzip
+
+# Runtime de LabDesk Shell (Node.js)
+nodejs
+npm
+
+# Tipografías y soporte de emojis
+fonts-liberation
+fonts-noto-color-emoji

@@ -1,0 +1,12 @@
+# FAI Variables para la clase LABDESK en Debian 12 "Bookworm"
+
+# URL del servidor LabDesk (IP fija del servidor en la escuela)
+LABDESK_SERVER_URL="http://192.168.3.16:3000"
+
+# Contraseña inicial del usuario estudiante y root
+ROOTPW='$6$rounds=656000$labdesk$QZ0v1J2K3L4M5N6O7P8Q9R0S1T2U3V4W5X6Y7Z8'
+ESTUDIANTE_PW="estudiante"
+
+# Timezone y Locale
+TIMEZONE="America/Santiago"
+KEYMAP="latam"

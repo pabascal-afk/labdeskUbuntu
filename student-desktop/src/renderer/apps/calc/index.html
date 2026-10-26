@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Calc - LabDesk</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        body { background: #0b1120; color: #f8fafc; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* HEADER */
+        .calc-header {
+            background: #1e293b;
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #334155;
+            gap: 12px;
+        }
+        .header-left { display: flex; align-items: center; gap: 10px; }
+        .app-badge {
+            background: #10b981;
+            color: white;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 4px;
+            letter-spacing: 0.5px;
+        }
+        .title-input {
+            background: transparent;
+            border: 1px solid transparent;
+            color: #f8fafc;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 4px;
+            width: 260px;
+        }
+        .title-input:hover, .title-input:focus {
+            background: #0f172a;
+            border-color: #10b981;
+            outline: none;
+        }
+        .actions { display: flex; gap: 8px; }
+        .btn {
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.15s;
+        }
+        .btn-success { background: #10b981; color: white; }
+        .btn-success:hover { background: #059669; }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-secondary { background: #334155; color: #f8fafc; }
+        .btn-secondary:hover { background: #475569; }
+
+        /* FORMATTING TOOLBAR */
+        .calc-toolbar {
+            background: #131d31;
+            padding: 5px 16px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            border-bottom: 1px solid #334155;
+            flex-wrap: wrap;
+        }
+        .tool-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            color: #cbd5e1;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            height: 26px;
+            min-width: 26px;
+            transition: all 0.15s;
+        }
+        .tool-btn:hover { background: #1e293b; color: white; border-color: #475569; }
+        .tool-btn.active { background: #10b981; color: white; }
+        .tool-sep { width: 1px; height: 18px; background: #334155; margin: 0 4px; }
+
+        .select-tool {
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            height: 26px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .color-wrap {
+            position: relative;
+            display: inline-flex;
+        }
+        .color-box {
+            width: 26px;
+            height: 26px;
+            border: 1px solid #334155;
+            border-radius: 4px;
+            background: #0f172a;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .hidden-color {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+            left: 0;
+            top: 0;
+        }
+
+        /* FORMULA BAR */
+        .formula-bar {
+            background: #0f172a;
+            padding: 6px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid #334155;
+        }
+        .cell-indicator {
+            background: #1e293b;
+            border: 1px solid #334155;
+            color: #10b981;
+            font-weight: 700;
+            font-size: 12px;
+            width: 50px;
+            text-align: center;
+            padding: 4px 0;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .formula-fx {
+            color: #10b981;
+            font-weight: bold;
+            font-size: 14px;
+            font-style: italic;
+        }
+        .formula-input {
+            flex: 1;
+            background: #1e293b;
+            border: 1px solid #334155;
+            color: white;
+            padding: 4px 10px;
+            font-size: 13px;
+            border-radius: 4px;
+            outline: none;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .formula-input:focus { border-color: #10b981; }
+
+        /* GRID */
+        .grid-container {
+            flex: 1;
+            overflow: auto;
+            background: #ffffff;
+        }
+        table {
+            border-collapse: collapse;
+            table-layout: fixed;
+            background: white;
+            color: #0f172a;
+            font-size: 13px;
+        }
+        th, td {
+            border: 1px solid #cbd5e1;
+            padding: 4px 8px;
+            height: 26px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        th {
+            background: #f1f5f9;
+            color: #475569;
+            font-weight: 600;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        th.row-header {
+            width: 48px;
+            left: 0;
+            z-index: 20;
+            background: #e2e8f0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+        }
+        td {
+            width: 110px;
+            outline: none;
+            cursor: cell;
+        }
+        td.selected {
+            outline: 2px solid #10b981;
+            z-index: 5;
+            background: #ecfdf5 !important;
+        }
+
+        /* STATUS */
+        .calc-status {
+            background: #1e293b;
+            padding: 5px 16px;
+            border-top: 1px solid #334155;
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        /* MODAL DE GRÁFICOS */
+        .chart-modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.65);
+            backdrop-filter: blur(2px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .chart-modal-overlay.show { display: flex; }
+        .chart-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 24px;
+            width: 580px;
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);
+        }
+        .chart-card h3 { font-size: 16px; margin-bottom: 12px; color: #f8fafc; }
+        .chart-canvas-wrap {
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="calc-header">
+        <div class="header-left">
+            <span class="app-badge">CALC</span>
+            <input type="text" id="sheet-title" class="title-input" value="Planilla Sin Título">
+        </div>
+        <div class="actions">
+            <button class="btn btn-primary" onclick="openChartModal()">📊 Ver Gráfico</button>
+            <button class="btn btn-secondary" onclick="exportCsv()">📄 Exportar CSV</button>
+            <button class="btn btn-secondary" onclick="saveLocally()">💾 Guardar</button>
+            <button class="btn btn-success" onclick="turnInSheet()">🚀 Entregar al Profesor</button>
+        </div>
+    </div>
+
+    <!-- TOOLBAR DE FORMATO -->
+    <div class="calc-toolbar">
+        <!-- Tipografías -->
+        <select class="select-tool" onchange="applyFontFamily(this.value)" title="Fuente">
+            <option value="Inter">Inter</option>
+            <option value="Roboto">Roboto</option>
+            <option value="Arial">Arial</option>
+            <option value="JetBrains Mono">Monospace</option>
+            <option value="Times New Roman">Times New Roman</option>
+        </select>
+
+        <div class="tool-sep"></div>
+
+        <!-- Estilos de celda -->
+        <button class="tool-btn" id="btn-bold" onclick="toggleStyle('bold')" title="Negrita"><strong>B</strong></button>
+        <button class="tool-btn" id="btn-italic" onclick="toggleStyle('italic')" title="Cursiva"><em>I</em></button>
+        <button class="tool-btn" id="btn-underline" onclick="toggleStyle('underline')" title="Subrayado"><u>U</u></button>
+
+        <div class="tool-sep"></div>
+
+        <!-- Color de texto y relleno -->
+        <div class="color-wrap" title="Color de Texto">
+            <div class="color-box" id="cell-color-preview" style="color:#10b981;">A</div>
+            <input type="color" class="hidden-color" value="#0f172a" onchange="applyCellTextColor(this.value)">
+        </div>
+
+        <div class="color-wrap" title="Color de Relleno">
+            <div class="color-box" id="cell-bg-preview" style="background:#e2e8f0; color:#000;">🎨</div>
+            <input type="color" class="hidden-color" value="#ffffff" onchange="applyCellBgColor(this.value)">
+        </div>
+
+        <div class="tool-sep"></div>
+
+        <!-- Alineación -->
+        <button class="tool-btn" onclick="applyAlign('left')" title="Alinear a la Izquierda">⇠</button>
+        <button class="tool-btn" onclick="applyAlign('center')" title="Centrar">≡</button>
+        <button class="tool-btn" onclick="applyAlign('right')" title="Alinear a la Derecha">⇢</button>
+
+        <div class="tool-sep"></div>
+
+        <!-- Formatos numéricos -->
+        <button class="tool-btn" onclick="applyNumFormat('currency')" title="Formato Moneda ($)">$</button>
+        <button class="tool-btn" onclick="applyNumFormat('percent')" title="Porcentaje (%)">%</button>
+        <button class="tool-btn" onclick="applyNumFormat('decimal')" title="Decimales (.00)">.00</button>
+        <button class="tool-btn" onclick="applyNumFormat('normal')" title="Texto Normal">ABC</button>
+
+        <div class="tool-sep"></div>
+
+        <!-- Filas y Columnas -->
+        <button class="tool-btn" onclick="addRow()" title="Agregar Fila">+ Fila</button>
+        <button class="tool-btn" onclick="addCol()" title="Agregar Columna">+ Col</button>
+        <button class="tool-btn" onclick="clearSelectedCell()" title="Limpiar Celda">🧹</button>
+    </div>
+
+    <!-- BARRA DE FÓRMULA -->
+    <div class="formula-bar">
+        <div id="cell-ref" class="cell-indicator">A1</div>
+        <span class="formula-fx">fx</span>
+        <input type="text" id="formula-input" class="formula-input" placeholder="Ej: =SUM(A1:A5), =PROMEDIO(B1:B10) o número">
+    </div>
+
+    <!-- TABLA DE CÁLCULO -->
+    <div class="grid-container">
+        <table id="calc-table"></table>
+    </div>
+
+    <!-- MODAL DE GRÁFICO AUTOMÁTICO -->
+    <div id="chart-modal" class="chart-modal-overlay">
+        <div class="chart-card">
+            <h3>📊 Gráfico de Datos de la Planilla</h3>
+            <div class="chart-canvas-wrap">
+                <canvas id="chart-canvas" width="520" height="260"></canvas>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:12px; color:#94a3b8;">Generado automáticamente a partir de tus columnas numéricas.</span>
+                <button class="btn btn-secondary" onclick="closeChartModal()">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- BARRA DE ESTADO -->
+    <div class="calc-status">
+        <span id="calc-info">Fórmulas: =SUM / =SUMA, =AVERAGE / =PROMEDIO, =MAX, =MIN, =COUNT y operaciones directas (+, -, *, /)</span>
+        <span id="save-status">Listo</span>
+    </div>
+
+    <script>
+        let COLS = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+        let ROWS = 40;
+        const cellData = {};   // Coordenadas -> { raw: '=SUM(A1:A2)', val: 30, style: {} }
+        let selectedCell = 'A1';
+
+        const table = document.getElementById('calc-table');
+        const cellRefEl = document.getElementById('cell-ref');
+        const formulaInput = document.getElementById('formula-input');
+        const saveStatusEl = document.getElementById('save-status');
+
+        buildTable();
+
+        function buildTable() {
+            table.innerHTML = '';
+
+            // Header Row
+            const thead = document.createElement('thead');
+            const htr = document.createElement('tr');
+            htr.innerHTML = `<th class="row-header">#</th>` + COLS.map(c => `<th>${c}</th>`).join('');
+            thead.appendChild(htr);
+            table.appendChild(thead);
+
+            // Rows
+            const tbody = document.createElement('tbody');
+            for (let r = 1; r <= ROWS; r++) {
+                const tr = document.createElement('tr');
+                let rowHtml = `<th class="row-header">${r}</th>`;
+                for (let c of COLS) {
+                    const id = `${c}${r}`;
+                    rowHtml += `<td id="${id}" contenteditable="true" onfocus="selectCell('${id}')" onblur="cellBlur('${id}', this.innerText)"></td>`;
+                }
+                tr.innerHTML = rowHtml;
+                tbody.appendChild(tr);
+            }
+            table.appendChild(tbody);
+
+            // Restaurar valores y estilos si existían
+            for (let id in cellData) {
+                const td = document.getElementById(id);
+                if (td) {
+                    td.innerText = cellData[id].val ?? cellData[id].raw;
+                    applyStoredStyles(td, cellData[id].style);
+                }
+            }
+
+            selectCell('A1');
+        }
+
+        function selectCell(id) {
+            if (selectedCell) {
+                const prev = document.getElementById(selectedCell);
+                if (prev) prev.classList.remove('selected');
+            }
+            selectedCell = id;
+            const current = document.getElementById(id);
+            if (current) current.classList.add('selected');
+            cellRefEl.textContent = id;
+            formulaInput.value = cellData[id]?.raw || (current ? current.innerText : '');
+        }
+
+        formulaInput.oninput = () => {
+            if (!selectedCell) return;
+            if (!cellData[selectedCell]) cellData[selectedCell] = {};
+            cellData[selectedCell].raw = formulaInput.value;
+        };
+
+        formulaInput.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                recomputeAll();
+            }
+        };
+
+        function cellBlur(id, text) {
+            if (!cellData[id]) cellData[id] = {};
+            if (!cellData[id].raw || !cellData[id].raw.startsWith('=')) {
+                cellData[id].raw = text;
+            }
+            recomputeAll();
+        }
+
+        // ==========================================
+        // EVALUADOR DE FÓRMULAS
+        // ==========================================
+        function evaluateFormula(expr) {
+            expr = expr.substring(1).trim().toUpperCase();
+
+            // =SUM(A1:A5) o =SUMA(A1:A5)
+            const sumMatch = expr.match(/^(?:SUM|SUMA)\(([A-Z]\d+):([A-Z]\d+)\)$/);
+            if (sumMatch) return rangeCalc(sumMatch[1], sumMatch[2], arr => arr.reduce((a, b) => a + b, 0));
+
+            // =AVERAGE(A1:A5) o =PROMEDIO(A1:A5)
+            const avgMatch = expr.match(/^(?:AVERAGE|PROMEDIO)\(([A-Z]\d+):([A-Z]\d+)\)$/);
+            if (avgMatch) return rangeCalc(avgMatch[1], avgMatch[2], arr => arr.length ? (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2) : 0);
+
+            // =MAX(A1:A5)
+            const maxMatch = expr.match(/^MAX\(([A-Z]\d+):([A-Z]\d+)\)$/);
+            if (maxMatch) return rangeCalc(maxMatch[1], maxMatch[2], arr => arr.length ? Math.max(...arr) : 0);
+
+            // =MIN(A1:A5)
+            const minMatch = expr.match(/^MIN\(([A-Z]\d+):([A-Z]\d+)\)$/);
+            if (minMatch) return rangeCalc(minMatch[1], minMatch[2], arr => arr.length ? Math.min(...arr) : 0);
+
+            // =COUNT(A1:A5) o =CONTAR(A1:A5)
+            const countMatch = expr.match(/^(?:COUNT|CONTAR)\(([A-Z]\d+):([A-Z]\d+)\)$/);
+            if (countMatch) return rangeCalc(countMatch[1], countMatch[2], arr => arr.length);
+
+            // Expresión matemática directa con referencias de celdas: =(A1+B1)*2
+            let parsed = expr.replace(/([A-Z]\d+)/g, (m) => {
+                const cVal = parseFloat(cellData[m]?.val ?? cellData[m]?.raw ?? 0);
+                return isNaN(cVal) ? 0 : cVal;
+            });
+
+            try {
+                if (/^[0-9+\-*/().\s]+$/.test(parsed)) {
+                    return Function(`'use strict'; return (${parsed})`)();
+                }
+            } catch (e) {}
+
+            return '#ERROR';
+        }
+
+        function rangeCalc(startId, endId, fn) {
+            const startCol = startId.charCodeAt(0) - 65;
+            const startRow = parseInt(startId.substring(1));
+            const endCol = endId.charCodeAt(0) - 65;
+            const endRow = parseInt(endId.substring(1));
+
+            const nums = [];
+            for (let c = Math.min(startCol, endCol); c <= Math.max(startCol, endCol); c++) {
+                const colLetter = String.fromCharCode(65 + c);
+                for (let r = Math.min(startRow, endRow); r <= Math.max(startRow, endRow); r++) {
+                    const id = `${colLetter}${r}`;
+                    const v = parseFloat(cellData[id]?.val ?? cellData[id]?.raw);
+                    if (!isNaN(v)) nums.push(v);
+                }
+            }
+            return fn(nums);
+        }
+
+        function recomputeAll() {
+            for (let id in cellData) {
+                const item = cellData[id];
+                if (item && item.raw && item.raw.startsWith('=')) {
+                    item.val = evaluateFormula(item.raw);
+                } else if (item) {
+                    item.val = item.raw;
+                }
+                const td = document.getElementById(id);
+                if (td) {
+                    td.innerText = formatValue(item.val, item.format);
+                }
+            }
+        }
+
+        function formatValue(val, fmt) {
+            if (val === undefined || val === null || val === '') return '';
+            const n = parseFloat(val);
+            if (isNaN(n)) return val;
+
+            if (fmt === 'currency') return `$ ${n.toLocaleString('es-CL')}`;
+            if (fmt === 'percent') return `${(n * 100).toFixed(1)}%`;
+            if (fmt === 'decimal') return n.toFixed(2);
+            return val;
+        }
+
+        // ==========================================
+        // FORMATO DE CELDAS
+        // ==========================================
+        function getSelectedCellObj() {
+            if (!selectedCell) return null;
+            if (!cellData[selectedCell]) cellData[selectedCell] = {};
+            if (!cellData[selectedCell].style) cellData[selectedCell].style = {};
+            return cellData[selectedCell];
+        }
+
+        function toggleStyle(prop) {
+            const c = getSelectedCellObj();
+            if (!c) return;
+            const td = document.getElementById(selectedCell);
+            if (prop === 'bold') {
+                c.style.bold = !c.style.bold;
+                td.style.fontWeight = c.style.bold ? 'bold' : 'normal';
+            } else if (prop === 'italic') {
+                c.style.italic = !c.style.italic;
+                td.style.fontStyle = c.style.italic ? 'italic' : 'normal';
+            } else if (prop === 'underline') {
+                c.style.underline = !c.style.underline;
+                td.style.textDecoration = c.style.underline ? 'underline' : 'none';
+            }
+        }
+
+        function applyCellTextColor(color) {
+            const c = getSelectedCellObj();
+            if (!c) return;
+            c.style.color = color;
+            const td = document.getElementById(selectedCell);
+            if (td) td.style.color = color;
+            document.getElementById('cell-color-preview').style.color = color;
+        }
+
+        function applyCellBgColor(color) {
+            const c = getSelectedCellObj();
+            if (!c) return;
+            c.style.background = color;
+            const td = document.getElementById(selectedCell);
+            if (td) td.style.background = color;
+            document.getElementById('cell-bg-preview').style.background = color;
+        }
+
+        function applyAlign(align) {
+            const c = getSelectedCellObj();
+            if (!c) return;
+            c.style.textAlign = align;
+            const td = document.getElementById(selectedCell);
+            if (td) td.style.textAlign = align;
+        }
+
+        function applyFontFamily(font) {
+            const c = getSelectedCellObj();
+            if (!c) return;
+            c.style.fontFamily = font;
+            const td = document.getElementById(selectedCell);
+            if (td) td.style.fontFamily = font;
+        }
+
+        function applyNumFormat(fmt) {
+            const c = getSelectedCellObj();
+            if (!c) return;
+            c.format = fmt;
+            recomputeAll();
+        }
+
+        function applyStoredStyles(td, st) {
+            if (!st) return;
+            if (st.bold) td.style.fontWeight = 'bold';
+            if (st.italic) td.style.fontStyle = 'italic';
+            if (st.underline) td.style.textDecoration = 'underline';
+            if (st.color) td.style.color = st.color;
+            if (st.background) td.style.background = st.background;
+            if (st.textAlign) td.style.textAlign = st.textAlign;
+            if (st.fontFamily) td.style.fontFamily = st.fontFamily;
+        }
+
+        function clearSelectedCell() {
+            if (!selectedCell) return;
+            cellData[selectedCell] = {};
+            const td = document.getElementById(selectedCell);
+            if (td) {
+                td.innerText = '';
+                td.style = '';
+            }
+            formulaInput.value = '';
+        }
+
+        function addRow() {
+            ROWS++;
+            buildTable();
+        }
+
+        function addCol() {
+            if (COLS.length < 26) {
+                COLS.push(String.fromCharCode(65 + COLS.length));
+                buildTable();
+            } else {
+                alert('Límite de 26 columnas alcanzado');
+            }
+        }
+
+        // ==========================================
+        // GRÁFICOS (HTML5 CANVAS)
+        // ==========================================
+        function openChartModal() {
+            document.getElementById('chart-modal').classList.add('show');
+            drawChart();
+        }
+
+        function closeChartModal() {
+            document.getElementById('chart-modal').classList.remove('show');
+        }
+
+        function drawChart() {
+            const canvas = document.getElementById('chart-canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Extraer etiquetas y números de las columnas A y B
+            const labels = [];
+            const values = [];
+
+            for (let r = 1; r <= Math.min(ROWS, 12); r++) {
+                const label = cellData[`A${r}`]?.val || cellData[`A${r}`]?.raw || `Item ${r}`;
+                const val = parseFloat(cellData[`B${r}`]?.val || cellData[`B${r}`]?.raw);
+                if (!isNaN(val)) {
+                    labels.push(label.toString().substring(0, 10));
+                    values.push(val);
+                }
+            }
+
+            if (values.length === 0) {
+                ctx.fillStyle = '#64748b';
+                ctx.font = '14px Inter';
+                ctx.textAlign = 'center';
+                ctx.fillText('Ingresa datos numéricos en la Columna B (y nombres en Col A)', canvas.width / 2, canvas.height / 2);
+                return;
+            }
+
+            const maxVal = Math.max(...values, 10);
+            const padding = 40;
+            const chartW = canvas.width - padding * 2;
+            const chartH = canvas.height - padding * 2;
+            const barW = Math.min(45, (chartW / values.length) * 0.7);
+
+            // Ejes
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(padding, padding);
+            ctx.lineTo(padding, canvas.height - padding);
+            ctx.lineTo(canvas.width - padding, canvas.height - padding);
+            ctx.stroke();
+
+            // Dibujar Barras
+            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#e11d48'];
+            values.forEach((v, i) => {
+                const x = padding + (i + 0.5) * (chartW / values.length) - barW / 2;
+                const h = (v / maxVal) * chartH;
+                const y = canvas.height - padding - h;
+
+                ctx.fillStyle = colors[i % colors.length];
+                ctx.beginPath();
+                ctx.roundRect(x, y, barW, h, [4, 4, 0, 0]);
+                ctx.fill();
+
+                // Valor arriba de la barra
+                ctx.fillStyle = '#0f172a';
+                ctx.font = 'bold 11px Inter';
+                ctx.textAlign = 'center';
+                ctx.fillText(v.toString(), x + barW / 2, y - 5);
+
+                // Etiqueta abajo
+                ctx.fillStyle = '#475569';
+                ctx.font = '11px Inter';
+                ctx.fillText(labels[i] || '', x + barW / 2, canvas.height - padding + 15);
+            });
+        }
+
+        // ==========================================
+        // EXPORTACIÓN Y ENTREGA
+        // ==========================================
+        function exportCsv() {
+            let csv = '';
+            for (let r = 1; r <= ROWS; r++) {
+                const rowVals = COLS.map(c => `"${(cellData[`${c}${r}`]?.val || '').toString().replace(/"/g, '""')}"`);
+                csv += rowVals.join(',') + '\r\n';
+            }
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `${document.getElementById('sheet-title').value || 'planilla'}.csv`;
+            link.click();
+        }
+
+        async function saveLocally() {
+            const title = document.getElementById('sheet-title').value.trim() || 'planilla';
+            const filename = `${title.replace(/[^a-zA-Z0-9_\-]/g, '_')}.calc.json`;
+            const content = JSON.stringify({ title, cellData, cols: COLS, rows: ROWS }, null, 2);
+
+            if (window.parent && window.parent.labdeskAPI) {
+                const res = await window.parent.labdeskAPI.files.saveLocal(filename, content);
+                if (res.success) {
+                    saveStatusEl.textContent = `Guardado en ~/Documentos/LabDesk/${filename}`;
+                    alert(`✅ Planilla guardada correctamente en:\n${res.filePath}`);
+                }
+            } else {
+                saveStatusEl.textContent = 'Guardado en sesión';
+            }
+        }
+
+        async function turnInSheet() {
+            const student = prompt('Ingresa tu nombre y apellido para la entrega:');
+            if (!student) return;
+
+            const title = document.getElementById('sheet-title').value.trim() || 'planilla';
+            const filename = `${title.replace(/[^a-zA-Z0-9_\-]/g, '_')}_${student.replace(/[^a-zA-Z0-9_\-]/g, '_')}.calc.json`;
+            const content = JSON.stringify({ title, student, cellData, cols: COLS, rows: ROWS }, null, 2);
+
+            saveStatusEl.textContent = 'Enviando al profesor...';
+
+            if (window.parent && window.parent.labdeskAPI) {
+                const res = await window.parent.labdeskAPI.turnIn.submitFile({
+                    filename,
+                    content,
+                    appType: 'Mini Calc',
+                    studentName: student,
+                    notes: `Planilla de cálculo entregada`
+                });
+
+                if (res.success) {
+                    saveStatusEl.textContent = '✅ Entregado al profesor exitosamente';
+                    alert('🎉 ¡Tu planilla ha sido entregada exitosamente al profesor!');
+                } else {
+                    saveStatusEl.textContent = 'Error en la entrega';
+                    alert('Error entregando trabajo: ' + (res.error || 'Servidor no disponible'));
+                }
+            } else {
+                alert('No se detectó conexión con el servidor LabDesk.');
+            }
+        }
+    </script>
+</body>
+</html>

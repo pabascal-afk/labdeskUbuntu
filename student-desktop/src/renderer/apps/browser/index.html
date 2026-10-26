@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navegador Educativo - LabDesk</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        body { background: #0f172a; color: #f8fafc; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* TABS BAR */
+        .tabs-bar {
+            background: #0b1120;
+            padding: 6px 12px 0;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            border-bottom: 1px solid #1e293b;
+            overflow-x: auto;
+        }
+        .tab-item {
+            background: #1e293b;
+            color: #94a3b8;
+            padding: 6px 12px;
+            border-radius: 8px 8px 0 0;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            max-width: 180px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            border: 1px solid transparent;
+            border-bottom: none;
+        }
+        .tab-item.active {
+            background: #1e293b;
+            color: #f8fafc;
+            border-color: #334155;
+            font-weight: 600;
+        }
+        .btn-tab-close {
+            background: transparent;
+            border: none;
+            color: #94a3b8;
+            cursor: pointer;
+            font-size: 12px;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-tab-close:hover { background: #ef4444; color: white; }
+        .btn-add-tab {
+            background: transparent;
+            border: none;
+            color: #94a3b8;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        .btn-add-tab:hover { background: #1e293b; color: white; }
+
+        /* NAV CONTROLS */
+        .nav-controls {
+            background: #1e293b;
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid #334155;
+        }
+        .nav-btn {
+            background: transparent;
+            border: none;
+            color: #cbd5e1;
+            font-size: 14px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .nav-btn:hover { background: #334155; color: white; }
+        .url-bar {
+            flex: 1;
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: white;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            outline: none;
+        }
+        .url-bar:focus { border-color: #3b82f6; }
+
+        /* BOOKMARKS BAR */
+        .bookmarks-bar {
+            background: #131d31;
+            padding: 4px 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border-bottom: 1px solid #334155;
+            overflow-x: auto;
+        }
+        .bm-item {
+            background: transparent;
+            border: none;
+            color: #cbd5e1;
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            white-space: nowrap;
+        }
+        .bm-item:hover { background: #1e293b; color: white; }
+
+        /* CONTENT AREA */
+        .webview-container {
+            flex: 1;
+            background: #0b1120;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #94a3b8;
+            font-size: 13px;
+            position: relative;
+        }
+    </style>
+</head>
+<body>
+    <div class="tabs-bar" id="tabs-bar">
+        <div class="tab-item active" id="tab-default">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+            <span class="tab-title">Google</span>
+            <button class="btn-tab-close">&times;</button>
+        </div>
+        <button class="btn-add-tab" onclick="createNewTab()">+</button>
+    </div>
+
+    <div class="nav-controls">
+        <button class="nav-btn" onclick="historyBack()" title="Atrás">◀</button>
+        <button class="nav-btn" onclick="historyForward()" title="Adelante">▶</button>
+        <button class="nav-btn" onclick="reloadPage()" title="Recargar">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+        </button>
+        <input type="text" id="url-input" class="url-bar" value="https://www.google.com" placeholder="Buscar en Google o ingresar dirección web...">
+        <button class="nav-btn" onclick="navigateToUrl()" title="Ir">➔</button>
+    </div>
+
+    <div class="bookmarks-bar">
+        <button class="bm-item" onclick="openBookmark('https://mail.google.com')">Gmail</button>
+        <button class="bm-item" onclick="openBookmark('https://docs.google.com')">Docs</button>
+        <button class="bm-item" onclick="openBookmark('https://sheets.google.com')">Sheets</button>
+        <button class="bm-item" onclick="openBookmark('https://slides.google.com')">Slides</button>
+        <button class="bm-item" onclick="openBookmark('https://drive.google.com')">Drive</button>
+        <button class="bm-item" onclick="openBookmark('https://classroom.google.com')">Classroom</button>
+        <button class="bm-item" onclick="openBookmark('https://es.wikipedia.org')">Wikipedia</button>
+    </div>
+
+    <div id="webview-placeholder" class="webview-container">
+        <div style="text-align:center;">
+            <div style="margin-bottom:12px;">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+            </div>
+            <h3>Navegador Educativo Seguro</h3>
+            <p style="margin-top:4px;">Cargando motor de navegación Chromium...</p>
+        </div>
+    </div>
+
+    <script>
+        const urlInput = document.getElementById('url-input');
+        let currentTabId = 'tab_1';
+
+        // Al iniciar, sincronizar vista con el proceso principal
+        window.addEventListener('DOMContentLoaded', () => {
+            initBrowser();
+        });
+
+        function initBrowser() {
+            if (window.parent && window.parent.labdeskAPI) {
+                // Registrar bounds del contenedor para WebContentsView
+                updateViewBounds();
+                window.addEventListener('resize', updateViewBounds);
+
+                // Abrir pestaña inicial
+                openBookmark('https://www.google.com');
+
+                // Escuchar navegación
+                window.parent.labdeskAPI.browser.onTabNavigated((data) => {
+                    urlInput.value = data.url;
+                });
+            }
+        }
+
+        function updateViewBounds() {
+            if (window.parent && window.parent.syncBrowserBounds) {
+                window.parent.syncBrowserBounds();
+            }
+        }
+
+        function navigateToUrl() {
+            let val = urlInput.value.trim();
+            if (!val) return;
+
+            if (!val.includes('.') || val.includes(' ')) {
+                val = `https://www.google.com/search?q=${encodeURIComponent(val)}`;
+            } else if (!val.startsWith('http://') && !val.startsWith('https://')) {
+                val = 'https://' + val;
+            }
+
+            urlInput.value = val;
+            if (window.parent && window.parent.labdeskAPI) {
+                window.parent.labdeskAPI.browser.openTab(val);
+            }
+        }
+
+        urlInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') navigateToUrl();
+        });
+
+        function openBookmark(url) {
+            urlInput.value = url;
+            if (window.parent && window.parent.labdeskAPI) {
+                window.parent.labdeskAPI.browser.openTab(url);
+            }
+        }
+
+        function createNewTab() {
+            openBookmark('https://www.google.com');
+        }
+
+        function historyBack() {
+            // Se puede extender con ipc
+        }
+
+        function historyForward() {
+            // Se puede extender con ipc
+        }
+
+        function reloadPage() {
+            navigateToUrl();
+        }
+    </script>
+</body>
+</html>

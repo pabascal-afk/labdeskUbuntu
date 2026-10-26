@@ -1,0 +1,16 @@
+[Unit]
+Description=LabDesk Educational Kiosk Desktop
+After=network.target sound.target
+
+[Service]
+Type=simple
+User=estudiante
+WorkingDirectory=/opt/labdesk/student-desktop
+ExecStart=/usr/bin/npm start -- --no-sandbox
+Restart=always
+RestartSec=3
+Environment=NODE_ENV=production
+Environment=DISPLAY=:0
+
+[Install]
+WantedBy=graphical.target

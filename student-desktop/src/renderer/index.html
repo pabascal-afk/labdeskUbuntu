@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LabDesk - Escritorio Educativo</title>
+    <link rel="stylesheet" href="styles/desktop.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="desktop" class="desktop-workspace">
+        <!-- ICONOS EN EL ESCRITORIO -->
+        <div class="desktop-icons-grid">
+            <div class="desktop-shortcut" ondblclick="openApp('writer')">
+                <div class="shortcut-icon icon-writer">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                </div>
+                <span class="shortcut-name">Mini Writer</span>
+            </div>
+            <div class="desktop-shortcut" ondblclick="openApp('calc')">
+                <div class="shortcut-icon icon-calc">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="3" y1="9" x2="21" y2="9"></line>
+                        <line x1="3" y1="15" x2="21" y2="15"></line>
+                        <line x1="9" y1="3" x2="9" y2="21"></line>
+                        <line x1="15" y1="3" x2="15" y2="21"></line>
+                    </svg>
+                </div>
+                <span class="shortcut-name">Mini Calc</span>
+            </div>
+            <div class="desktop-shortcut" ondblclick="openApp('slides')">
+                <div class="shortcut-icon icon-slides">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="3" width="20" height="14" rx="2"></rect>
+                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                        <polygon points="10 7 15 10 10 13 10 7" fill="white"></polygon>
+                    </svg>
+                </div>
+                <span class="shortcut-name">Mini Slides</span>
+            </div>
+            <div class="desktop-shortcut" ondblclick="openApp('browser')">
+                <div class="shortcut-icon icon-browser">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="2" y1="12" x2="22" y2="12"></line>
+                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                    </svg>
+                </div>
+                <span class="shortcut-name">Navegador</span>
+            </div>
+            <div class="desktop-shortcut" ondblclick="openApp('files')">
+                <div class="shortcut-icon icon-files">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                </div>
+                <span class="shortcut-name">Mis Trabajos</span>
+            </div>
+            
+            <div class="shortcut-separator"></div>
+
+            <!-- Accesos a Google Workspace con logos SVG vectorizados -->
+            <div class="desktop-shortcut" ondblclick="openGoogleApp('https://docs.google.com')">
+                <div class="shortcut-icon icon-google">
+                    <svg width="28" height="28" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>
+                        <path fill="#A1C2FA" d="M14 2v6h6"/>
+                        <line x1="8" y1="13" x2="16" y2="13" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+                        <line x1="8" y1="17" x2="14" y2="17" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <span class="shortcut-name">Google Docs</span>
+            </div>
+            <div class="desktop-shortcut" ondblclick="openGoogleApp('https://sheets.google.com')">
+                <div class="shortcut-icon icon-google">
+                    <svg width="28" height="28" viewBox="0 0 24 24">
+                        <path fill="#0F9D58" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>
+                        <path fill="#87CEAC" d="M14 2v6h6"/>
+                        <rect x="7" y="11" width="10" height="8" rx="1" fill="none" stroke="white" stroke-width="1.5"/>
+                        <line x1="12" y1="11" x2="12" y2="19" stroke="white" stroke-width="1.2"/>
+                        <line x1="7" y1="15" x2="17" y2="15" stroke="white" stroke-width="1.2"/>
+                    </svg>
+                </div>
+                <span class="shortcut-name">Google Sheets</span>
+            </div>
+            <div class="desktop-shortcut" ondblclick="openGoogleApp('https://classroom.google.com')">
+                <div class="shortcut-icon icon-google">
+                    <svg width="28" height="28" viewBox="0 0 24 24">
+                        <rect x="2" y="3" width="20" height="15" rx="2" fill="#1E8E3E"/>
+                        <rect x="3" y="4" width="18" height="13" rx="1" fill="#0D652D"/>
+                        <circle cx="12" cy="9" r="2.5" fill="#F9AB00"/>
+                        <path d="M7 15c0-2 2.5-3 5-3s5 1 5 3" fill="#F9AB00"/>
+                    </svg>
+                </div>
+                <span class="shortcut-name">Classroom</span>
+            </div>
+            <div class="desktop-shortcut" ondblclick="openGoogleApp('https://mail.google.com')">
+                <div class="shortcut-icon icon-google">
+                    <svg width="28" height="28" viewBox="0 0 24 24">
+                        <rect x="2" y="4" width="20" height="16" rx="2" fill="#EA4335"/>
+                        <polygon points="12 13 2 6 22 6" fill="#FFFFFF"/>
+                        <polygon points="2 6 12 13 2 18" fill="#D93025"/>
+                        <polygon points="22 6 12 13 22 18" fill="#D93025"/>
+                    </svg>
+                </div>
+                <span class="shortcut-name">Gmail</span>
+            </div>
+            <div class="desktop-shortcut" ondblclick="openGoogleApp('https://drive.google.com')">
+                <div class="shortcut-icon icon-google">
+                    <svg width="28" height="28" viewBox="0 0 24 24">
+                        <path fill="#FFBA00" d="M8.2 3.8L1.6 15.2h6.4L14.6 3.8H8.2z"/>
+                        <path fill="#0066DA" d="M15.8 15.2H23L16.4 3.8h-6.4l6.6 11.4h-.8z"/>
+                        <path fill="#00AC47" d="M5.3 21.2l3.3-5.7H22l-3.3 5.7H5.3z"/>
+                    </svg>
+                </div>
+                <span class="shortcut-name">Drive</span>
+            </div>
+        </div>
+
+        <!-- CONTENEDOR DE VENTANAS FLOTANTES -->
+        <div id="windows-container" class="windows-container"></div>
+
+        <!-- MENÚ DE INICIO -->
+        <div id="start-menu" class="start-menu">
+            <div class="start-menu-header">
+                <div class="user-avatar">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
+                        <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h4 id="user-display-name">Estudiante</h4>
+                    <span id="user-machine-name" class="machine-label">Puesto Digital</span>
+                </div>
+            </div>
+
+            <div class="start-menu-body">
+                <div class="menu-section-title">Suite Ofimática Ligera</div>
+                <div class="start-menu-item" onclick="openApp('writer')">
+                    <span class="item-icon icon-writer">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                        </svg>
+                    </span>
+                    <div>
+                        <strong>Mini Writer</strong>
+                        <p>Procesador de textos con formato, imágenes y PDF</p>
+                    </div>
+                </div>
+                <div class="start-menu-item" onclick="openApp('calc')">
+                    <span class="item-icon icon-calc">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                            <line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="3" x2="9" y2="21"></line>
+                        </svg>
+                    </span>
+                    <div>
+                        <strong>Mini Calc</strong>
+                        <p>Hoja de cálculo con fórmulas matemáticas y gráficos</p>
+                    </div>
+                </div>
+                <div class="start-menu-item" onclick="openApp('slides')">
+                    <span class="item-icon icon-slides">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                            <rect x="2" y="3" width="20" height="14" rx="2"></rect>
+                            <line x1="12" y1="17" x2="12" y2="21"></line>
+                        </svg>
+                    </span>
+                    <div>
+                        <strong>Mini Slides</strong>
+                        <p>Presentaciones con imágenes y diapositivas</p>
+                    </div>
+                </div>
+
+                <div class="menu-section-title">Google Workspace</div>
+                <div class="start-menu-item" onclick="openGoogleApp('https://docs.google.com')">
+                    <span class="item-icon icon-google">
+                        <svg width="20" height="20" viewBox="0 0 24 24">
+                            <path fill="#4285F4" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>
+                        </svg>
+                    </span>
+                    <div><strong>Google Docs</strong></div>
+                </div>
+                <div class="start-menu-item" onclick="openGoogleApp('https://classroom.google.com')">
+                    <span class="item-icon icon-google">
+                        <svg width="20" height="20" viewBox="0 0 24 24">
+                            <rect x="2" y="3" width="20" height="15" rx="2" fill="#1E8E3E"/>
+                        </svg>
+                    </span>
+                    <div><strong>Google Classroom</strong></div>
+                </div>
+                <div class="start-menu-item" onclick="openGoogleApp('https://mail.google.com')">
+                    <span class="item-icon icon-google">
+                        <svg width="20" height="20" viewBox="0 0 24 24">
+                            <rect x="2" y="4" width="20" height="16" rx="2" fill="#EA4335"/>
+                        </svg>
+                    </span>
+                    <div><strong>Gmail</strong></div>
+                </div>
+            </div>
+
+            <div class="start-menu-footer">
+                <button class="btn-clear-session" onclick="clearGoogleSessionPrompt()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:4px;"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+                    Cerrar Sesión Google
+                </button>
+            </div>
+        </div>
+
+        <!-- BARRA DE TAREAS INFERIOR -->
+        <div class="taskbar">
+            <button id="btn-start" class="btn-start">
+                <span class="start-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="3" width="20" height="14" rx="2"></rect>
+                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                    </svg>
+                </span>
+                <span>Inicio</span>
+            </button>
+
+            <div id="taskbar-apps" class="taskbar-apps">
+                <!-- Ventanas abiertas minimizadas/activas -->
+            </div>
+
+            <div class="taskbar-tray">
+                <!-- Control de Audio -->
+                <div class="tray-item tray-audio" id="tray-audio-wrap">
+                    <button id="btn-tray-mute" class="tray-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                    </button>
+                    <div id="tray-audio-popup" class="audio-popup">
+                        <label>Volumen: <span id="audio-vol-text">50%</span></label>
+                        <input type="range" id="tray-vol-slider" min="0" max="100" value="50">
+                    </div>
+                </div>
+
+                <!-- Conexión Servidor -->
+                <div class="tray-item" title="Estado de conexión con el profesor">
+                    <span id="conn-dot" class="status-dot dot-online"></span>
+                    <span id="machine-tag" class="tray-text">LabDesk</span>
+                </div>
+
+                <!-- Reloj -->
+                <div class="tray-item clock" id="tray-clock">
+                    12:00
+                </div>
+            </div>
+        </div>
+
+        <!-- PANTALLA DE BLOQUEO / KIOSK LOCK OVERLAY -->
+        <div id="lockscreen" class="lockscreen">
+            <div class="lockscreen-card">
+                <div class="lock-logo">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                </div>
+                <h2 id="lock-title">Atención al Profesor</h2>
+                <p id="lock-msg" class="lock-subtitle">La estación ha sido bloqueada temporalmente.</p>
+
+                <!-- Teclado PIN -->
+                <div class="pin-box">
+                    <input type="password" id="pin-display" class="pin-input" readonly placeholder="••••">
+                    <div class="pin-keypad">
+                        <button class="key-btn" onclick="pressPin('1')">1</button>
+                        <button class="key-btn" onclick="pressPin('2')">2</button>
+                        <button class="key-btn" onclick="pressPin('3')">3</button>
+                        <button class="key-btn" onclick="pressPin('4')">4</button>
+                        <button class="key-btn" onclick="pressPin('5')">5</button>
+                        <button class="key-btn" onclick="pressPin('6')">6</button>
+                        <button class="key-btn" onclick="pressPin('7')">7</button>
+                        <button class="key-btn" onclick="pressPin('8')">8</button>
+                        <button class="key-btn" onclick="pressPin('9')">9</button>
+                        <button class="key-btn key-clear" onclick="clearPin()">C</button>
+                        <button class="key-btn" onclick="pressPin('0')">0</button>
+                        <button class="key-btn key-ok" onclick="submitPin()">OK</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="desktop.js"></script>
+    <script src="lockscreen.js"></script>
+</body>
+</html>

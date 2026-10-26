@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LabDesk - Botonera del Profesor (SemiAdmin)</title>
+    <link rel="stylesheet" href="botonera.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+    <div class="deck-container">
+        <!-- BARRA SUPERIOR / HUD DEL PROFESOR -->
+        <header class="deck-header">
+            <div class="brand-zone">
+                <div class="brand-icon">🎛️</div>
+                <div>
+                    <h1>LabDesk <span>SemiAdmin</span></h1>
+                    <div class="room-selector-wrap">
+                        <label for="sector-select">SALA ASIGNADA:</label>
+                        <select id="sector-select" class="sector-dropdown">
+                            <option value="all">🖥️ Toda la Sala (Todos)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TABLERO DE ESTADO EN TIEMPO REAL (HUD) -->
+            <div class="hud-metrics">
+                <div class="hud-item" id="hud-online-item">
+                    <span class="hud-label">ESTACIONES ACTIVAS</span>
+                    <div class="hud-value">
+                        <span class="led-dot led-green"></span>
+                        <span id="hud-online-count">0 / 0</span>
+                    </div>
+                </div>
+
+                <div class="hud-item" id="hud-lock-item">
+                    <span class="hud-label">ESTADO PANTALLAS</span>
+                    <div class="hud-value">
+                        <span id="led-lock" class="led-dot led-off"></span>
+                        <span id="hud-lock-text">LIBRES</span>
+                    </div>
+                </div>
+
+                <div class="hud-item" id="hud-audio-item">
+                    <span class="hud-label">AUDIO DE SALA</span>
+                    <div class="hud-value">
+                        <span id="led-audio" class="led-dot led-green"></span>
+                        <span id="hud-audio-text">ACTIVO</span>
+                    </div>
+                </div>
+
+                <div class="hud-item" id="hud-turnin-item" onclick="openTurnInsModal()">
+                    <span class="hud-label">TAREAS RECIBIDAS</span>
+                    <div class="hud-value cursor-pointer">
+                        <span class="hud-badge" id="hud-turnin-count">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="header-tools">
+                <button class="btn-tool" onclick="lockConsole()" title="Proteger Botonera con PIN">
+                    🛡️ <span>Pausar</span>
+                </button>
+                <a href="/" class="btn-tool" title="Ir al Panel Completo de Administrador">
+                    ⚙️ <span>Admin</span>
+                </a>
+            </div>
+        </header>
+
+        <!-- CUADRÍCULA DE LA BOTONERA (STREAM DECK CONSOLE) -->
+        <main class="deck-main">
+            <!-- SECCIÓN 1: CONTROL DE ATENCIÓN (PANTALLAS) -->
+            <div class="deck-section">
+                <div class="section-tag">
+                    <span class="tag-num">01</span>
+                    <span class="tag-title">ATENCIÓN & PANTALLAS</span>
+                </div>
+                <div class="buttons-grid">
+                    <button class="deck-btn btn-lock" id="btn-lock-room" onclick="triggerAction('lock')">
+                        <div class="btn-led led-red" id="led-btn-lock"></div>
+                        <div class="btn-icon">🔒</div>
+                        <div class="btn-label">BLOQUEAR SALA</div>
+                        <div class="btn-sub">Atención a la pizarra</div>
+                    </button>
+
+                    <button class="deck-btn btn-unlock" id="btn-unlock-room" onclick="triggerAction('unlock')">
+                        <div class="btn-led led-green" id="led-btn-unlock"></div>
+                        <div class="btn-icon">🔓</div>
+                        <div class="btn-label">DESBLOQUEAR</div>
+                        <div class="btn-sub">Habilitar trabajo</div>
+                    </button>
+
+                    <button class="deck-btn btn-view" onclick="openMosaicModal()">
+                        <div class="btn-icon">👁️</div>
+                        <div class="btn-label">MOSAICO EN VIVO</div>
+                        <div class="btn-sub">Supervisar pantallas</div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- SECCIÓN 2: CONTROL DE SONIDO -->
+            <div class="deck-section">
+                <div class="section-tag">
+                    <span class="tag-num">02</span>
+                    <span class="tag-title">DISCIPLINA SONORA</span>
+                </div>
+                <div class="buttons-grid">
+                    <button class="deck-btn btn-mute" id="btn-mute-room" onclick="triggerAction('volume_mute')">
+                        <div class="btn-led led-red" id="led-btn-mute"></div>
+                        <div class="btn-icon">🔇</div>
+                        <div class="btn-label">SILENCIAR SALA</div>
+                        <div class="btn-sub">Mute a todos</div>
+                    </button>
+
+                    <button class="deck-btn btn-audio-on" onclick="triggerAction('volume_unmute')">
+                        <div class="btn-icon">🔊</div>
+                        <div class="btn-label">ACTIVAR SONIDO</div>
+                        <div class="btn-sub">Restaurar audio</div>
+                    </button>
+
+                    <button class="deck-btn btn-audio-lvl" onclick="triggerAction('volume_set', { volume: 30 })">
+                        <div class="btn-icon">🔈</div>
+                        <div class="btn-label">VOLUMEN 30%</div>
+                        <div class="btn-sub">Modo moderado</div>
+                    </button>
+
+                    <button class="deck-btn btn-audio-lvl" onclick="triggerAction('volume_set', { volume: 80 })">
+                        <div class="btn-icon">📢</div>
+                        <div class="btn-label">VOLUMEN 80%</div>
+                        <div class="btn-sub">Modo multimedia</div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- SECCIÓN 3: LANZADOR GOOGLE WORKSPACE -->
+            <div class="deck-section">
+                <div class="section-tag">
+                    <span class="tag-num">03</span>
+                    <span class="tag-title">GOOGLE WORKSPACE (1-TOQUE)</span>
+                </div>
+                <div class="buttons-grid">
+                    <button class="deck-btn btn-google" onclick="launchUrl('https://docs.google.com/document/create')">
+                        <div class="btn-icon">📄</div>
+                        <div class="btn-label">NUEVO DOC</div>
+                        <div class="btn-sub">Google Docs</div>
+                    </button>
+
+                    <button class="deck-btn btn-google" onclick="launchUrl('https://classroom.google.com')">
+                        <div class="btn-icon">🎓</div>
+                        <div class="btn-label">CLASSROOM</div>
+                        <div class="btn-sub">Abrir tarea del día</div>
+                    </button>
+
+                    <button class="deck-btn btn-google" onclick="launchUrl('https://sheets.google.com/create')">
+                        <div class="btn-icon">📊</div>
+                        <div class="btn-label">NUEVA SHEET</div>
+                        <div class="btn-sub">Google Sheets</div>
+                    </button>
+
+                    <button class="deck-btn btn-google" onclick="launchUrl('https://slides.google.com/create')">
+                        <div class="btn-icon">📽️</div>
+                        <div class="btn-label">PRESENTACIÓN</div>
+                        <div class="btn-sub">Google Slides</div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- SECCIÓN 4: RECURSOS WEB & EXÁMENES -->
+            <div class="deck-section">
+                <div class="section-tag">
+                    <span class="tag-num">04</span>
+                    <span class="tag-title">RECURSOS & EXÁMENES</span>
+                </div>
+                <div class="buttons-grid">
+                    <button class="deck-btn btn-web" onclick="openLinkModal(false)">
+                        <div class="btn-icon">🌐</div>
+                        <div class="btn-label">ENVIAR ENLACE</div>
+                        <div class="btn-sub">Navegación libre</div>
+                    </button>
+
+                    <button class="deck-btn btn-exam" onclick="openLinkModal(true)">
+                        <div class="btn-icon">🔒</div>
+                        <div class="btn-label">PÁGINA CAUTIVA</div>
+                        <div class="btn-sub">Modo Examen</div>
+                    </button>
+
+                    <button class="deck-btn btn-broadcast" onclick="openAnnouncementModal()">
+                        <div class="btn-icon">📢</div>
+                        <div class="btn-label">AVISO EN PANTALLA</div>
+                        <div class="btn-sub">Mensaje emergente</div>
+                    </button>
+
+                    <button class="deck-btn btn-turnin" onclick="openTurnInsModal()">
+                        <div class="btn-icon">📥</div>
+                        <div class="btn-label">BUZÓN TAREAS</div>
+                        <div class="btn-sub" id="sub-turnin-count">0 recibidas</div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- SECCIÓN 5: ENERGÍA & CIERRE -->
+            <div class="deck-section">
+                <div class="section-tag">
+                    <span class="tag-num">05</span>
+                    <span class="tag-title">ENERGÍA & CIERRE</span>
+                </div>
+                <div class="buttons-grid">
+                    <button class="deck-btn btn-power-on" onclick="confirmPower('wake')">
+                        <div class="btn-icon">⚡</div>
+                        <div class="btn-label">ENCENDER SALA</div>
+                        <div class="btn-sub">Wake-on-LAN</div>
+                    </button>
+
+                    <button class="deck-btn btn-power-reboot" onclick="confirmPower('reboot')">
+                        <div class="btn-icon">🔄</div>
+                        <div class="btn-label">REINICIAR SALA</div>
+                        <div class="btn-sub">Reinicio limpio</div>
+                    </button>
+
+                    <button class="deck-btn btn-power-off" onclick="confirmPower('shutdown')">
+                        <div class="btn-icon">🛑</div>
+                        <div class="btn-label">APAGAR SALA</div>
+                        <div class="btn-sub">Fin de clase</div>
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- MODAL: MOSAICO DE PANTALLAS EN VIVO (SUPERVISIÓN)               -->
+    <!-- ============================================================== -->
+    <div id="modal-mosaic" class="modal-overlay">
+        <div class="modal-box modal-wide">
+            <div class="modal-top">
+                <h3>👁️ Mosaico en Tiempo Real - Supervisión de Sala</h3>
+                <button class="btn-modal-close" onclick="closeModal('modal-mosaic')">&times;</button>
+            </div>
+            <div class="modal-scrollable">
+                <div class="mosaic-grid" id="mosaic-grid">
+                    <!-- Se rellena con las pantallas de los estudiantes -->
+                </div>
+            </div>
+            <div class="modal-bottom">
+                <span id="mosaic-stats" class="text-muted">Cargando pantallas...</span>
+                <button class="btn-action" onclick="refreshMosaic()">🔄 Actualizar Capturas</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- MODAL: LANZADOR DE ENLACE WEB O PÁGINA CAUTIVA (EXAMEN)        -->
+    <!-- ============================================================== -->
+    <div id="modal-link" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-top">
+                <h3 id="link-modal-title">🌐 Enviar Enlace a Todas las Estaciones</h3>
+                <button class="btn-modal-close" onclick="closeModal('modal-link')">&times;</button>
+            </div>
+            <div class="modal-form">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <label style="margin:0;">Accesos Directos (1-Toque):</label>
+                    <button type="button" class="btn-preset-toggle" onclick="togglePresetEditor()">⚙️ Personalizar Accesos</button>
+                </div>
+
+                <div class="presets-grid" id="presets-grid-container">
+                    <!-- Rellenado dinámicamente -->
+                </div>
+
+                <!-- Editor de Accesos Directos Personalizados -->
+                <div id="preset-editor-panel" class="preset-editor-panel" style="display:none;">
+                    <div class="editor-header">
+                        <strong>Editar Accesos Directos</strong>
+                        <button type="button" class="btn-reset-presets" onclick="resetDefaultPresets()">Restaurar</button>
+                    </div>
+                    <div id="preset-items-list" class="preset-items-list">
+                        <!-- Lista de accesos -->
+                    </div>
+                    <div class="preset-new-form">
+                        <input type="text" id="new-preset-icon" placeholder="Icono" style="width:55px;" value="🌐">
+                        <input type="text" id="new-preset-name" placeholder="Nombre (ej. Examen de Ciencias)">
+                        <input type="text" id="new-preset-url" placeholder="https://...">
+                        <button type="button" class="btn-add-preset" onclick="addNewPreset()">+ Añadir</button>
+                    </div>
+                </div>
+
+                <div class="field-group" style="margin-top:12px;">
+                    <label for="custom-url-input">Dirección URL personalizada:</label>
+                    <input type="text" id="custom-url-input" class="input-console" placeholder="https://ejemplo.edu/recurso">
+                </div>
+
+                <div class="checkbox-row" id="kiosk-checkbox-row">
+                    <label>
+                        <input type="checkbox" id="kiosk-mode-toggle">
+                        <span><strong>Página Cautiva</strong> <small style="color:var(--text-dim);">(Modo Examen: fija la URL y bloquea la navegación)</small></span>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-bottom">
+                <button class="btn-cancel" onclick="closeModal('modal-link')">Cancelar</button>
+                <button class="btn-action btn-send" onclick="sendCustomUrl()">🚀 Enviar a la Sala</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- MODAL: ENVIAR AVISO RÁPIDO EN PANTALLA                          -->
+    <!-- ============================================================== -->
+    <div id="modal-announcement" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-top">
+                <h3>📢 Enviar Aviso a Pantalla de Todos los Alumnos</h3>
+                <button class="btn-modal-close" onclick="closeModal('modal-announcement')">&times;</button>
+            </div>
+            <div class="modal-form">
+                <label>Avisos Rápidos Típicos:</label>
+                <div class="presets-grid">
+                    <button class="preset-pill" onclick="pickAnnouncement('⏰ Quedan 5 minutos para terminar y entregar.')">⏰ Quedan 5 min</button>
+                    <button class="preset-pill" onclick="pickAnnouncement('💾 Recuerden guardar su trabajo y pulsar Entregar.')">💾 Guarden su trabajo</button>
+                    <button class="preset-pill" onclick="pickAnnouncement('🤫 Silencio por favor, atención a la explicación.')">🤫 Silencio por favor</button>
+                    <button class="preset-pill" onclick="pickAnnouncement('🛑 No toquen teclados ni ratones.')">🛑 Manos arriba</button>
+                </div>
+
+                <div class="field-group">
+                    <label for="announcement-text-input">Mensaje personalizado:</label>
+                    <input type="text" id="announcement-text-input" class="input-console" placeholder="Escribe tu mensaje aquí...">
+                </div>
+            </div>
+            <div class="modal-bottom">
+                <button class="btn-cancel" onclick="closeModal('modal-announcement')">Cancelar</button>
+                <button class="btn-action btn-send" onclick="sendAnnouncement()">📢 Mostrar Aviso</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- MODAL: BUZÓN DE TAREAS ENTREGADAS                               -->
+    <!-- ============================================================== -->
+    <div id="modal-turnins" class="modal-overlay">
+        <div class="modal-box modal-wide">
+            <div class="modal-top">
+                <h3>📥 Tareas y Trabajos Entregados por los Alumnos</h3>
+                <button class="btn-modal-close" onclick="closeModal('modal-turnins')">&times;</button>
+            </div>
+            <div class="modal-scrollable">
+                <table class="turnin-table">
+                    <thead>
+                        <tr>
+                            <th>Hora</th>
+                            <th>Estudiante</th>
+                            <th>Equipo</th>
+                            <th>Programa</th>
+                            <th>Archivo</th>
+                            <th>Descargar</th>
+                        </tr>
+                    </thead>
+                    <tbody id="turnin-tbody">
+                        <tr><td colspan="6" class="text-center">Cargando entregas...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-bottom">
+                <span id="turnin-total-label" class="text-muted">Total: 0 tareas</span>
+                <button class="btn-action" onclick="fetchTurnInsList()">🔄 Actualizar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- PANTALLA DE BLOQUEO DE BOTONERA (SEGURIDAD DEL PROFESOR)        -->
+    <!-- ============================================================== -->
+    <div id="console-lock-screen" class="console-lock-overlay">
+        <div class="lock-panel">
+            <div class="lock-icon">🛡️</div>
+            <h2>Botonera en Pausa</h2>
+            <p>La consola está protegida para evitar toques no autorizados.</p>
+            
+            <div class="pin-entry">
+                <input type="password" id="console-pin-display" class="pin-screen" readonly placeholder="••••">
+                <div class="keypad">
+                    <button class="pad-btn" onclick="pressConsolePin('1')">1</button>
+                    <button class="pad-btn" onclick="pressConsolePin('2')">2</button>
+                    <button class="pad-btn" onclick="pressConsolePin('3')">3</button>
+                    <button class="pad-btn" onclick="pressConsolePin('4')">4</button>
+                    <button class="pad-btn" onclick="pressConsolePin('5')">5</button>
+                    <button class="pad-btn" onclick="pressConsolePin('6')">6</button>
+                    <button class="pad-btn" onclick="pressConsolePin('7')">7</button>
+                    <button class="pad-btn" onclick="pressConsolePin('8')">8</button>
+                    <button class="pad-btn" onclick="pressConsolePin('9')">9</button>
+                    <button class="pad-btn pad-clear" onclick="clearConsolePin()">C</button>
+                    <button class="pad-btn" onclick="pressConsolePin('0')">0</button>
+                    <button class="pad-btn pad-ok" onclick="unlockConsole()">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Banner Toast para confirmaciones táctiles -->
+    <div id="toast-banner" class="toast-banner">Acción ejecutada</div>
+
+    <script src="botonera.js"></script>
+</body>
+</html>

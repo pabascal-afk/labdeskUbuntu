@@ -1,0 +1,100 @@
+#!/bin/bash
+# ==============================================================================
+# FAI Script: 20-setup-labdesk
+# Ejecutado al final de la instalación desatendida de Debian 12
+# $target = Ruta de la raíz instalada en el disco del cliente
+# ==============================================================================
+
+set -e
+
+echo "=========================================================="
+echo "🔧 FAI: Configurando Estación LabDesk en $target"
+echo "=========================================================="
+
+# 1. Crear usuario 'estudiante' si no existe
+if ! $ROOTCMD id -u estudiante >/dev/null 2>&1; then
+    $ROOTCMD useradd -m -s /bin/bash estudiante
+    echo "estudiante:estudiante" | $ROOTCMD chpasswd
+    $ROOTCMD usermod -aG audio,video,netdev estudiante
+    echo "✅ Usuario 'estudiante' creado."
+fi
+
+# 2. Configurar inicio de sesión automático (LightDM -> Openbox)
+mkdir -p $target/etc/lightdm/lightdm.conf.d
+cat <<EOF > $target/etc/lightdm/lightdm.conf.d/50-labdesk-autologin.conf
+[Seat:*]
+autologin-user=estudiante
+autologin-user-timeout=0
+user-session=openbox
+EOF
+
+# 3. Bloqueo de cambio a consola virtual (Ctrl+Alt+F1...F6)
+mkdir -p $target/etc/X11/xorg.conf.d
+cat <<EOF > $target/etc/X11/xorg.conf.d/20-disable-vt.conf
+Section "ServerFlags"
+    Option "DontVTSwitch" "true"
+    Option "DontZap" "true"
+EndSection
+EOF
+
+# 4. Configurar Openbox para autoarrancar LabDesk
+STUDENT_HOME="$target/home/estudiante"
+mkdir -p "$STUDENT_HOME/.config/openbox"
+mkdir -p "$STUDENT_HOME/.config/labdesk"
+mkdir -p "$STUDENT_HOME/Documentos/LabDesk"
+
+# Archivo de configuración con la IP del servidor
+SERVER_URL="${LABDESK_SERVER_URL:-http://192.168.3.16:3000}"
+cat <<EOF > "$STUDENT_HOME/.config/labdesk/config.json"
+{
+  "serverUrl": "$SERVER_URL",
+  "kiosk": true
+}
+EOF
+
+# Autostart de Openbox
+cat <<EOF > "$STUDENT_HOME/.config/openbox/autostart"
+# Desactivar protector de pantalla y suspensión
+xset s off
+xset -dpms
+xset s noblank
+
+# Iniciar LabDesk en bucle (auto-reinicio en caso de fallo)
+while true; do
+    cd /opt/labdesk/student-desktop
+    npm start -- --no-sandbox
+    sleep 2
+done &
+EOF
+chmod +x "$STUDENT_HOME/.config/openbox/autostart"
+
+# Archivo rc.xml de Openbox sin atajos de escape
+cat <<EOF > "$STUDENT_HOME/.config/openbox/rc.xml"
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+    <keyboard>
+        <!-- Atajos de sistema desactivados para quiosco -->
+    </keyboard>
+</openbox_config>
+EOF
+
+# 5. Instalar archivos de LabDesk en /opt/labdesk
+mkdir -p $target/opt/labdesk
+if [ -d "/fai/files/student-desktop" ]; then
+    cp -r /fai/files/student-desktop $target/opt/labdesk/
+elif [ -d "$FAI/../student-desktop" ]; then
+    cp -r "$FAI/../student-desktop" $target/opt/labdesk/
+fi
+
+# Instalar dependencias npm en chroot si existen
+if [ -f "$target/opt/labdesk/student-desktop/package.json" ]; then
+    $ROOTCMD bash -c "cd /opt/labdesk/student-desktop && npm install --omit=dev || true"
+fi
+
+# Corregir permisos
+$ROOTCMD chown -R estudiante:estudiante /home/estudiante
+$ROOTCMD chown -R estudiante:estudiante /opt/labdesk
+
+echo "=========================================================="
+echo "✅ FAI: Estación LabDesk lista para encender y operar."
+echo "=========================================================="

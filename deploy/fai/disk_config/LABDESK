@@ -1,0 +1,13 @@
+# ==============================================================================
+# FAI Disk Config: LABDESK
+# Particionado automatizado de disco completo (Soporta BIOS MBR y UEFI GPT)
+# ==============================================================================
+
+disk_config disk1 disklabel:gpt bootable:1 fstabkey:uuid
+
+# Partición EFI para arranques modernos UEFI
+primary  /boot/efi     256M      vfat    rw
+# Partición raíz del sistema Debian 12
+primary  /             12G-      ext4    rw,noatime,errors=remount-ro
+# Espacio de intercambio (Swap)
+logical  swap          2G-4G     swap    rw

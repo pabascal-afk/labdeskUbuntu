@@ -1,0 +1,20 @@
+{
+  "name": "labdesk-desktop",
+  "version": "2.0.0",
+  "description": "LabDesk Educational Kiosk Desktop Shell for Linux Students",
+  "main": "src/main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --linux deb"
+  },
+  "keywords": ["education", "electron", "kiosk", "linux", "desktop"],
+  "author": "LabDesk",
+  "license": "MIT",
+  "dependencies": {
+    "electron": "^30.0.9",
+    "socket.io-client": "^4.7.5"
+  },
+  "devDependencies": {
+    "electron-builder": "^24.13.3"
+  }
+}
