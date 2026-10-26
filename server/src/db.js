@@ -64,12 +64,7 @@ function initSchema() {
             position INTEGER,
             is_shortcut INTEGER DEFAULT 0
         )`, () => {
-            // Verificar si hay scripts precargados, si no, sembrar scripts Linux por defecto
-            db.get(`SELECT COUNT(*) as count FROM scripts`, (err, row) => {
-                if (!err && row && row.count === 0) {
-                    insertDefaultScripts();
-                }
-            });
+            ensureDefaultScripts();
         });
 
         // Tabla de configuraciones globales
@@ -110,46 +105,87 @@ function initSchema() {
     });
 }
 
-function insertDefaultScripts() {
+function ensureDefaultScripts() {
+    const updateScriptContent = `#!/bin/bash
+CONFIG_FILE="$HOME/.config/labdesk/config.json"
+SERVER_URL=""
+if [ -f "$CONFIG_FILE" ]; then
+    SERVER_URL=$(grep -o '"serverUrl": "[^"]*' "$CONFIG_FILE" | cut -d'"' -f4)
+fi
+if [ -z "$SERVER_URL" ]; then
+    SERVER_URL="http://192.168.3.16:3000"
+fi
+
+echo "=========================================="
+echo "🚀 Actualizando LabDesk Estudiante..."
+echo "🌐 Servidor: $SERVER_URL"
+echo "=========================================="
+
+mkdir -p /opt/labdesk/student-desktop
+if curl -fsSL "$SERVER_URL/student-desktop.tar.gz" | tar -xz -C /opt/labdesk/student-desktop; then
+    echo "✅ Archivos descargados y extraídos correctamente."
+    echo "🔄 Reiniciando interfaz de usuario..."
+    pkill -f "electron" || pkill -f "labdesk" || true
+    echo "🎉 Actualización completada con éxito."
+else
+    echo "❌ Error al descargar student-desktop.tar.gz desde $SERVER_URL"
+    exit 1
+fi`;
+
     const defaultScripts = [
         {
-            name: 'Actualizar Software Estudiante',
+            name: '⚡ Actualizar Software Estudiante',
             description: 'Descarga la última versión de LabDesk desde el servidor y reinicia la interfaz en 3 segundos.',
             icon: '⚡',
-            content: `#!/bin/bash\nSERVER_IP="192.168.3.16:3000"\necho "Descargando actualización de LabDesk..."\ncurl -sSL "http://$SERVER_IP/student-desktop.tar.gz" | tar -xz -C /opt/labdesk/student-desktop\npkill -f electron\necho "Software actualizado exitosamente."`
+            content: updateScriptContent
         },
         {
-            name: 'Reiniciar Audio (PipeWire / Pulse)',
+            name: '🔊 Reiniciar Audio (PipeWire / Pulse)',
             description: 'Restaura el servidor de audio del sistema en caso de problemas de sonido.',
             icon: '🔊',
             content: `#!/bin/bash\n# Reinicia los servicios de audio de usuario en Linux\nsystemctl --user restart pipewire wireplumber 2>/dev/null || pulseaudio -k 2>/dev/null\necho "Audio reiniciado exitosamente."`
         },
         {
-            name: 'Limpiar Archivos Temporales',
+            name: '🧹 Limpiar Archivos Temporales',
             description: 'Limpia la caché del navegador y archivos temporales para liberar memoria.',
             icon: '🧹',
             content: `#!/bin/bash\nrm -rf /tmp/* ~/.cache/google-chrome* ~/.cache/chromium* 2>/dev/null\necho "Archivos temporales y cachés limpiadas."`
         },
         {
-            name: 'Reiniciar Entorno LabDesk',
+            name: '🔄 Reiniciar Entorno LabDesk',
             description: 'Reinicia la aplicación del escritorio educativo del estudiante.',
             icon: '🔄',
-            content: `#!/bin/bash\nsystemctl --user restart labdesk 2>/dev/null || pkill -f labdesk\necho "Entorno de escritorio reiniciado."`
+            content: `#!/bin/bash\nsystemctl --user restart labdesk 2>/dev/null || pkill -f electron || pkill -f labdesk\necho "Entorno de escritorio reiniciado."`
         },
         {
-            name: 'Test de Conectividad a Internet',
+            name: '🌐 Test de Conectividad a Internet',
             description: 'Verifica ping al servidor y a servidores DNS externos.',
             icon: '🌐',
             content: `#!/bin/bash\necho "=== Ping Gateway / DNS ==="\nping -c 2 8.8.8.8 || ping -c 2 1.1.1.1`
         }
     ];
 
-    const stmt = db.prepare(`INSERT INTO scripts (name, description, icon, content, position, is_shortcut) VALUES (?, ?, ?, ?, ?, 1)`);
     defaultScripts.forEach((s, idx) => {
-        stmt.run(s.name, s.description, s.icon, s.content, idx);
+        const cleanName = s.name.replace(/^[^\w\s]+/, '').trim();
+        db.get(`SELECT id, name FROM scripts WHERE name LIKE ? OR name = ?`, [`%${cleanName}%`, s.name], (err, row) => {
+            if (err) return;
+            if (!row) {
+                db.run(
+                    `INSERT INTO scripts (name, description, icon, content, position, is_shortcut) VALUES (?, ?, ?, ?, ?, 1)`,
+                    [s.name, s.description, s.icon, s.content, idx],
+                    (insErr) => {
+                        if (!insErr) console.log(`✅ Default Linux script inserted: ${s.name}`);
+                    }
+                );
+            } else if (cleanName === 'Actualizar Software Estudiante') {
+                // Mantener el script de actualización al día con el script resiliente
+                db.run(
+                    `UPDATE scripts SET name = ?, description = ?, icon = ?, content = ? WHERE id = ?`,
+                    [s.name, s.description, s.icon, s.content, row.id]
+                );
+            }
+        });
     });
-    stmt.finalize();
-    console.log('✅ Default Linux scripts populated.');
 }
 
 module.exports = db;

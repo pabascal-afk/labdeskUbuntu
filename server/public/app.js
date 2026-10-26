@@ -738,6 +738,11 @@ async function fetchScripts() {
         const container = document.getElementById('scripts-container');
         container.innerHTML = '';
 
+        if (!scripts || scripts.length === 0) {
+            container.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem; padding:10px;">No hay scripts configurados.</p>';
+            return;
+        }
+
         scripts.forEach(s => {
             const card = document.createElement('div');
             card.className = 'script-card';
@@ -746,18 +751,36 @@ async function fetchScripts() {
                     <h4>${s.icon || '📜'} ${escapeHtml(s.name)}</h4>
                     <p style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">${escapeHtml(s.description || '')}</p>
                 </div>
-                <div style="margin-top:10px; display:flex; gap:0.5rem;">
-                    <button class="btn btn-sm btn-primary" onclick="runScriptNow('${escapeHtml(s.content)}')">▶️ Ejecutar en Todos</button>
+                <div style="margin-top:10px; display:flex; gap:0.5rem; flex-wrap:wrap;">
+                    <button class="btn btn-sm btn-primary btn-run-now">▶️ Ejecutar en Todos</button>
+                    <button class="btn btn-sm btn-secondary btn-view-code" title="Ver contenido del script">👁️ Ver Código</button>
                 </div>
             `;
+            const runBtn = card.querySelector('.btn-run-now');
+            runBtn.onclick = () => runScriptNow(s.content, s.name);
+
+            const viewBtn = card.querySelector('.btn-view-code');
+            viewBtn.onclick = () => {
+                const outBox = document.getElementById('script-output');
+                const outText = document.getElementById('script-output-text');
+                outBox.style.display = 'block';
+                outText.textContent = `=== [Código del Script: ${s.name}] ===\n\n${s.content}`;
+                outBox.scrollIntoView({ behavior: 'smooth' });
+            };
+
             container.appendChild(card);
         });
-    } catch(e) {}
+    } catch(e) {
+        console.error('Error al obtener scripts:', e);
+    }
 }
 
-async function runScriptNow(content) {
-    document.getElementById('script-output').style.display = 'block';
-    document.getElementById('script-output-text').textContent = 'Enviando orden de ejecución a los clientes Linux...';
+async function runScriptNow(content, scriptName) {
+    const outBox = document.getElementById('script-output');
+    const outText = document.getElementById('script-output-text');
+    outBox.style.display = 'block';
+    outText.textContent = `[${new Date().toLocaleTimeString()}] Enviando script "${scriptName || 'Bash'}" a los clientes Linux activos...\nEsperando respuesta de las estaciones...\n`;
+    outBox.scrollIntoView({ behavior: 'smooth' });
     await sendGlobalCommand('run_script', content);
 }
 
