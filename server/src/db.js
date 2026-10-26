@@ -113,6 +113,12 @@ function initSchema() {
 function insertDefaultScripts() {
     const defaultScripts = [
         {
+            name: 'Actualizar Software Estudiante',
+            description: 'Descarga la última versión de LabDesk desde el servidor y reinicia la interfaz en 3 segundos.',
+            icon: '⚡',
+            content: `#!/bin/bash\nSERVER_IP="192.168.3.16:3000"\necho "Descargando actualización de LabDesk..."\ncurl -sSL "http://$SERVER_IP/student-desktop.tar.gz" | tar -xz -C /opt/labdesk/student-desktop\npkill -f electron\necho "Software actualizado exitosamente."`
+        },
+        {
             name: 'Reiniciar Audio (PipeWire / Pulse)',
             description: 'Restaura el servidor de audio del sistema en caso de problemas de sonido.',
             icon: '🔊',
