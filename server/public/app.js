@@ -78,6 +78,12 @@ function setupEventListeners() {
     document.getElementById('btn-power-modal').onclick = () => openModal('modal-power');
     document.getElementById('btn-settings-modal').onclick = () => { openModal('modal-settings'); fetchSettings(); };
 
+    // Editor de Scripts Bash
+    const btnNewScript = document.getElementById('btn-new-script');
+    if (btnNewScript) btnNewScript.onclick = () => openScriptEditor();
+    const btnSaveScript = document.getElementById('btn-save-script');
+    if (btnSaveScript) btnSaveScript.onclick = saveScriptFromEditor;
+
     // Envío de Pestaña / URL
     document.getElementById('btn-send-url').onclick = sendBrowserUrl;
 
@@ -211,6 +217,9 @@ function renderClients(clients) {
                 </button>
                 <button class="btn btn-sm btn-secondary" onclick="openSingleTabPrompt('${client.id}')">
                     🌐 Pestaña
+                </button>
+                <button class="btn btn-sm btn-secondary" onclick="openSingleScriptPrompt('${client.id}')" title="Ejecutar script en este equipo">
+                    📜 Script
                 </button>
             </div>
         `;
@@ -731,15 +740,46 @@ async function deleteTurnIn(id) {
 // ==========================================
 // SCRIPTS BASH
 // ==========================================
-async function fetchScripts() {
+function openSingleScriptPrompt(clientId) {
+    openModal('modal-scripts');
+    fetchScripts(clientId);
+}
+
+async function fetchScripts(targetClientId = null) {
     try {
+        // Actualizar selector de destino de ejecución
+        const targetSelect = document.getElementById('scripts-target-select');
+        if (targetSelect) {
+            const currentVal = targetClientId || targetSelect.value || 'all';
+            targetSelect.innerHTML = `<option value="all">🌐 Todos los equipos del sector</option>`;
+            
+            const relevantClients = (activeSectorId === 'all')
+                ? currentClients 
+                : currentClients.filter(c => String(c.sector_id) === String(activeSectorId));
+
+            relevantClients.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.id;
+                opt.textContent = `${c.status === 'online' ? '🟢' : '⚪'} ${c.name} (${c.ip_address || 'Sin IP'})`;
+                targetSelect.appendChild(opt);
+            });
+
+            if (targetClientId && targetSelect.querySelector(`option[value="${targetClientId}"]`)) {
+                targetSelect.value = targetClientId;
+            } else if (targetSelect.querySelector(`option[value="${currentVal}"]`)) {
+                targetSelect.value = currentVal;
+            } else {
+                targetSelect.value = 'all';
+            }
+        }
+
         const res = await fetch('/api/scripts');
         const scripts = await res.json();
         const container = document.getElementById('scripts-container');
         container.innerHTML = '';
 
         if (!scripts || scripts.length === 0) {
-            container.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem; padding:10px;">No hay scripts configurados.</p>';
+            container.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem; padding:15px; grid-column:1/-1;">No hay scripts configurados. Haz clic en <strong>"+ Crear Script"</strong> para agregar uno.</p>';
             return;
         }
 
@@ -747,26 +787,29 @@ async function fetchScripts() {
             const card = document.createElement('div');
             card.className = 'script-card';
             card.innerHTML = `
-                <div>
-                    <h4>${s.icon || '📜'} ${escapeHtml(s.name)}</h4>
-                    <p style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">${escapeHtml(s.description || '')}</p>
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem;">
+                    <div>
+                        <h4 style="display:flex; align-items:center; gap:0.4rem; font-size:0.95rem; margin:0;">
+                            <span style="font-size:1.2rem;">${s.icon || '📜'}</span>
+                            <span>${escapeHtml(s.name)}</span>
+                        </h4>
+                        <p style="font-size:0.75rem; color:var(--text-muted); margin-top:5px; line-height:1.35;">${escapeHtml(s.description || 'Sin descripción')}</p>
+                    </div>
+                    <div style="display:flex; gap:0.25rem;">
+                        <button class="btn btn-sm btn-secondary btn-edit-script" title="Editar script" style="padding:2px 7px; font-size:0.75rem;">✏️</button>
+                        <button class="btn btn-sm btn-danger btn-del-script" title="Eliminar script" style="padding:2px 7px; font-size:0.75rem;">🗑️</button>
+                    </div>
                 </div>
-                <div style="margin-top:10px; display:flex; gap:0.5rem; flex-wrap:wrap;">
-                    <button class="btn btn-sm btn-primary btn-run-now">▶️ Ejecutar en Todos</button>
-                    <button class="btn btn-sm btn-secondary btn-view-code" title="Ver contenido del script">👁️ Ver Código</button>
+                <div style="margin-top:12px; display:flex; gap:0.4rem; flex-wrap:wrap; align-items:center;">
+                    <button class="btn btn-sm btn-primary btn-run-now" style="flex:1;">▶️ Ejecutar</button>
+                    <button class="btn btn-sm btn-secondary btn-view-code" title="Ver código fuente">👁️ Código</button>
                 </div>
             `;
-            const runBtn = card.querySelector('.btn-run-now');
-            runBtn.onclick = () => runScriptNow(s.content, s.name);
 
-            const viewBtn = card.querySelector('.btn-view-code');
-            viewBtn.onclick = () => {
-                const outBox = document.getElementById('script-output');
-                const outText = document.getElementById('script-output-text');
-                outBox.style.display = 'block';
-                outText.textContent = `=== [Código del Script: ${s.name}] ===\n\n${s.content}`;
-                outBox.scrollIntoView({ behavior: 'smooth' });
-            };
+            card.querySelector('.btn-run-now').onclick = () => runScriptNow(s.content, s.name);
+            card.querySelector('.btn-view-code').onclick = () => viewScriptCode(s);
+            card.querySelector('.btn-edit-script').onclick = () => openScriptEditor(s);
+            card.querySelector('.btn-del-script').onclick = () => deleteScript(s.id, s.name);
 
             container.appendChild(card);
         });
@@ -775,13 +818,134 @@ async function fetchScripts() {
     }
 }
 
-async function runScriptNow(content, scriptName) {
+function viewScriptCode(script) {
     const outBox = document.getElementById('script-output');
     const outText = document.getElementById('script-output-text');
     outBox.style.display = 'block';
-    outText.textContent = `[${new Date().toLocaleTimeString()}] Enviando script "${scriptName || 'Bash'}" a los clientes Linux activos...\nEsperando respuesta de las estaciones...\n`;
+    outText.textContent = `=== [Código del Script: ${script.name}] ===\n\n${script.content}`;
     outBox.scrollIntoView({ behavior: 'smooth' });
-    await sendGlobalCommand('run_script', content);
+}
+
+function openScriptEditor(script = null) {
+    const title = document.getElementById('script-editor-title');
+    const idInput = document.getElementById('script-edit-id');
+    const iconInput = document.getElementById('script-edit-icon');
+    const nameInput = document.getElementById('script-edit-name');
+    const descInput = document.getElementById('script-edit-desc');
+    const contentInput = document.getElementById('script-edit-content');
+
+    if (script) {
+        title.textContent = `✏️ Editar Script: ${script.name}`;
+        idInput.value = script.id;
+        iconInput.value = script.icon || '📜';
+        nameInput.value = script.name;
+        descInput.value = script.description || '';
+        contentInput.value = script.content;
+    } else {
+        title.textContent = '✨ Nuevo Script Linux (Bash)';
+        idInput.value = '';
+        iconInput.value = '📜';
+        nameInput.value = '';
+        descInput.value = '';
+        contentInput.value = '#!/bin/bash\n\n# Escribe aquí tus comandos Linux\necho "Ejecutando script..."\n';
+    }
+
+    openModal('modal-script-editor');
+    if (!script) {
+        setTimeout(() => nameInput.focus(), 100);
+    }
+}
+
+async function saveScriptFromEditor() {
+    const id = document.getElementById('script-edit-id').value;
+    const icon = document.getElementById('script-edit-icon').value.trim() || '📜';
+    const name = document.getElementById('script-edit-name').value.trim();
+    const description = document.getElementById('script-edit-desc').value.trim();
+    const content = document.getElementById('script-edit-content').value.trim();
+
+    if (!name) {
+        alert('Por favor, ingresa un nombre para el script.');
+        document.getElementById('script-edit-name').focus();
+        return;
+    }
+    if (!content) {
+        alert('Por favor, ingresa el código Bash para el script.');
+        document.getElementById('script-edit-content').focus();
+        return;
+    }
+
+    const payload = {
+        name,
+        description,
+        content,
+        icon,
+        is_shortcut: 1
+    };
+
+    try {
+        let res;
+        if (id) {
+            res = await fetch(`/api/scripts/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        } else {
+            res = await fetch('/api/scripts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        }
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+            closeModal('modal-script-editor');
+            showNotification(id ? `Script "${name}" actualizado con éxito.` : `Script "${name}" creado con éxito.`);
+            await fetchScripts();
+        } else {
+            alert('Error al guardar el script: ' + (data.error || 'Error desconocido'));
+        }
+    } catch (err) {
+        alert('Error de conexión al guardar el script: ' + err.message);
+    }
+}
+
+async function deleteScript(id, name) {
+    if (!confirm(`¿Estás seguro de que deseas eliminar el script "${name}"?\n\nEsta acción eliminará el script permanentemente.`)) {
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/scripts/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            showNotification(`Script "${name}" eliminado.`);
+            await fetchScripts();
+        } else {
+            alert('Error al eliminar script: ' + (data.error || 'Error desconocido'));
+        }
+    } catch(err) {
+        alert('Error de conexión al eliminar: ' + err.message);
+    }
+}
+
+async function runScriptNow(content, scriptName) {
+    const targetSelect = document.getElementById('scripts-target-select');
+    const targetId = targetSelect ? targetSelect.value : 'all';
+    const targetName = targetSelect ? targetSelect.options[targetSelect.selectedIndex]?.text : 'Todos los equipos';
+
+    const outBox = document.getElementById('script-output');
+    const outText = document.getElementById('script-output-text');
+    outBox.style.display = 'block';
+    outText.textContent = `[${new Date().toLocaleTimeString()}] Enviando orden de ejecución "${scriptName || 'Bash'}" a: ${targetName}...\nEsperando respuesta...\n`;
+    outBox.scrollIntoView({ behavior: 'smooth' });
+
+    if (targetId === 'all') {
+        await sendGlobalCommand('run_script', content);
+    } else {
+        await sendCommand(targetId, 'run_script', content);
+    }
 }
 
 // ==========================================

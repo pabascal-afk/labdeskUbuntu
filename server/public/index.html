@@ -196,17 +196,72 @@
                 <button class="btn-close" onclick="closeModal('modal-scripts')">&times;</button>
             </div>
             <div class="modal-body">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem; background:rgba(255,255,255,0.03); padding:0.6rem 0.8rem; border-radius:var(--radius-sm); border:1px solid var(--border-color);">
+                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                        <label for="scripts-target-select" style="font-size:0.85rem; font-weight:600;">🎯 Destino de ejecución:</label>
+                        <select id="scripts-target-select" class="select-box" style="width:auto; min-width:220px; padding:0.35rem 0.6rem; font-size:0.85rem;">
+                            <option value="all">🌐 Todos los equipos del sector</option>
+                        </select>
+                    </div>
+                    <span style="font-size:0.75rem; color:var(--text-muted);">Ejecución asíncrona por SSH / WebSocket</span>
+                </div>
                 <div class="scripts-grid" id="scripts-container">
-                    <!-- Se rellena con scripts por defecto -->
+                    <!-- Se rellena con scripts -->
                 </div>
                 <div class="script-output-box" id="script-output" style="display:none;">
-                    <h4>Salida de Ejecución:</h4>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <h4>Salida de Ejecución:</h4>
+                        <button class="btn btn-sm btn-secondary" style="font-size:0.7rem; padding:2px 8px;" onclick="document.getElementById('script-output-text').textContent = '';">Limpiar</button>
+                    </div>
                     <pre id="script-output-text"></pre>
                 </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeModal('modal-scripts')">Cerrar</button>
                 <button class="btn btn-primary" id="btn-new-script">+ Crear Script</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MODAL: EDITOR DE SCRIPTS BASH (CREAR / EDITAR) -->
+    <!-- ============================================== -->
+    <div id="modal-script-editor" class="modal" style="z-index: 1050;">
+        <div class="modal-content modal-wide">
+            <div class="modal-header">
+                <h3 id="script-editor-title">✨ Nuevo Script Linux (Bash)</h3>
+                <button class="btn-close" onclick="closeModal('modal-script-editor')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="script-edit-id" value="">
+                
+                <div style="display: grid; grid-template-columns: 80px 1fr; gap: 0.75rem;">
+                    <div class="form-group">
+                        <label for="script-edit-icon" style="font-weight:600; font-size:0.85rem;">Icono:</label>
+                        <input type="text" id="script-edit-icon" class="input-text" style="text-align:center; font-size:1.3rem;" value="📜" maxlength="4">
+                    </div>
+                    <div class="form-group">
+                        <label for="script-edit-name" style="font-weight:600; font-size:0.85rem;">Nombre del Script: *</label>
+                        <input type="text" id="script-edit-name" class="input-text" placeholder="Ej: Instalar Scratch 3, Reiniciar Red...">
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-top: 0.75rem;">
+                    <label for="script-edit-desc" style="font-weight:600; font-size:0.85rem;">Descripción:</label>
+                    <input type="text" id="script-edit-desc" class="input-text" placeholder="Breve resumen de lo que realiza el script...">
+                </div>
+
+                <div class="form-group" style="margin-top: 0.75rem;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.25rem;">
+                        <label for="script-edit-content" style="font-weight:600; font-size:0.85rem;">Código Bash (Linux): *</label>
+                        <span style="font-size:0.75rem; color:var(--text-muted);">Se ejecutará en la estación de los alumnos</span>
+                    </div>
+                    <textarea id="script-edit-content" class="input-text" rows="10" style="font-family:monospace; font-size:0.85rem; line-height:1.45; resize:vertical; background:#0b1120;" placeholder="#!/bin/bash&#10;echo 'Ejecutando script...'"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('modal-script-editor')">Cancelar</button>
+                <button class="btn btn-primary" id="btn-save-script">💾 Guardar Script</button>
             </div>
         </div>
     </div>
