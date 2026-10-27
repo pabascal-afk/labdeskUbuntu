@@ -67,10 +67,16 @@ async function initAudioControls() {
         const willShow = !popup.classList.contains('show');
         popup.classList.toggle('show');
         if (willShow) refreshAudioDeviceSelectors();
+        syncBrowserBounds();
     };
 
     document.addEventListener('click', (e) => {
-        if (!trayWrap.contains(e.target)) popup.classList.remove('show');
+        if (!trayWrap.contains(e.target)) {
+            if (popup.classList.contains('show')) {
+                popup.classList.remove('show');
+                syncBrowserBounds();
+            }
+        }
     });
 
     // Botón Activar Audífonos USB automático
@@ -172,11 +178,15 @@ function initStartMenu() {
     btnStart.onclick = (e) => {
         e.stopPropagation();
         menu.classList.toggle('show');
+        syncBrowserBounds();
     };
 
     document.addEventListener('click', (e) => {
         if (!menu.contains(e.target) && e.target !== btnStart) {
-            menu.classList.remove('show');
+            if (menu.classList.contains('show')) {
+                menu.classList.remove('show');
+                syncBrowserBounds();
+            }
         }
     });
 }
@@ -316,6 +326,22 @@ function syncBrowserBounds() {
     if (!win || !window.labdeskAPI) return;
 
     if (win.style.display === 'none') {
+        window.labdeskAPI.browser.hideTabs();
+        return;
+    }
+
+    // Si el menú de inicio o el popup de audio están abiertos, ocultar la vista nativa del navegador
+    // para que NO tape el menú de inicio ni los controles de volumen/dispositivos
+    const startMenu = document.getElementById('start-menu');
+    const isStartMenuOpen = startMenu && startMenu.classList.contains('show');
+
+    const audioPopup = document.getElementById('tray-audio-popup');
+    const isAudioPopupOpen = audioPopup && audioPopup.classList.contains('show');
+
+    const lockOverlay = document.getElementById('screen-lock');
+    const isLocked = lockOverlay && lockOverlay.classList.contains('show');
+
+    if (isStartMenuOpen || isAudioPopupOpen || isLocked) {
         window.labdeskAPI.browser.hideTabs();
         return;
     }
