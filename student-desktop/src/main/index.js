@@ -1,5 +1,5 @@
 // LabDesk Student Desktop Shell - Main Process
-const { app, BrowserWindow, ipcMain, globalShortcut } = require('electron');
+const { app, BrowserWindow, screen, ipcMain, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -27,12 +27,19 @@ if (!gotTheLock) {
 }
 
 function createWindow() {
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { width, height } = primaryDisplay.bounds;
+
     mainWindow = new BrowserWindow({
-        width: 1280,
-        height: 800,
-        kiosk: true,
-        fullscreen: true,
+        x: 0,
+        y: 0,
+        width: width || 1280,
+        height: height || 800,
+        kiosk: false,
+        fullscreen: false,
         frame: false,
+        movable: false,
+        resizable: false,
         autoHideMenuBar: true,
         backgroundColor: '#0f172a',
         webPreferences: {
@@ -43,6 +50,21 @@ function createWindow() {
         }
     });
 
+    // Impedir que el estudiante cierre el escritorio LabDesk con Alt+F4 o Ctrl+W
+    mainWindow.on('close', (e) => {
+        if (!app.isQuitting) {
+            e.preventDefault();
+        }
+    });
+
+    // Ajustar dimensiones si cambia la resolución del monitor
+    screen.on('display-metrics-changed', () => {
+        if (mainWindow && !mainWindow.isDestroyed() && !browser.isKioskExam) {
+            const b = screen.getPrimaryDisplay().bounds;
+            mainWindow.setBounds({ x: 0, y: 0, width: b.width, height: b.height });
+        }
+    });
+
     // Cargar la interfaz de escritorio personalizada
     mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 
@@ -50,21 +72,8 @@ function createWindow() {
     browser.init(mainWindow);
     agent.init(mainWindow);
 
-    // Deshabilitar atajos de teclado peligrosos en Linux
-    registerKioskShortcuts();
-
     mainWindow.on('closed', () => {
         mainWindow = null;
-    });
-}
-
-function registerKioskShortcuts() {
-    // Interceptar Alt+F4 y atajos comunes para que los estudiantes no cierren el quiosco
-    globalShortcut.register('Alt+F4', () => {
-        console.log('🔒 Atajo Alt+F4 bloqueado en modo quiosco');
-    });
-    globalShortcut.register('CommandOrControl+W', () => {
-        console.log('🔒 Atajo Ctrl+W bloqueado');
     });
 }
 
@@ -93,18 +102,43 @@ ipcMain.handle('system:info', () => ({
     docsPath: system.getDocumentsPath()
 }));
 
-ipcMain.handle('system:shutdown', () => system.shutdown());
-ipcMain.handle('system:reboot', () => system.reboot());
+ipcMain.handle('system:shutdown', () => {
+    app.isQuitting = true;
+    return system.shutdown();
+});
+ipcMain.handle('system:reboot', () => {
+    app.isQuitting = true;
+    return system.reboot();
+});
 
-// Navegador y Google
+// Control de superposición sobre navegador estándar (para Menú Inicio, Pop-up Audio y Apps internas)
+ipcMain.handle('system:setOverlayMode', (e, { active, restoreExternalBrowser }) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (browser.isKioskExam || agent.isLocked) {
+        mainWindow.setAlwaysOnTop(true, 'screen-saver');
+        mainWindow.focus();
+        return;
+    }
+    if (active) {
+        mainWindow.setAlwaysOnTop(true, 'pop-up-menu');
+        mainWindow.focus();
+        mainWindow.moveTop();
+    } else {
+        mainWindow.setAlwaysOnTop(false);
+        if (restoreExternalBrowser && browser.externalBrowserRunning && browser.externalBrowserFocused) {
+            browser.focusExternalBrowser();
+        }
+    }
+});
+
+// Navegador Híbrido (Estándar + Visor Cautivo)
 ipcMain.handle('browser:getState', () => browser.getTabsState());
 ipcMain.handle('browser:openTab', (e, { url, isKiosk }) => browser.openTab(url, { isKiosk }));
-ipcMain.handle('browser:setActiveTab', (e, tabId) => browser.setActiveTab(tabId));
-ipcMain.handle('browser:closeTab', (e, tabId) => browser.closeTab(tabId));
-ipcMain.handle('browser:navigate', (e, url) => browser.navigate(url));
-ipcMain.handle('browser:goBack', () => browser.goBack());
-ipcMain.handle('browser:goForward', () => browser.goForward());
-ipcMain.handle('browser:reload', () => browser.reload());
+ipcMain.handle('browser:focusExternal', () => browser.focusExternalBrowser());
+ipcMain.handle('browser:minimizeExternal', () => browser.minimizeExternalBrowser());
+ipcMain.handle('browser:closeExternal', () => browser.killExternalBrowser());
+ipcMain.handle('browser:goHomeCaptive', () => browser.goHomeCaptive());
+ipcMain.handle('browser:reloadCaptive', () => browser.reloadCaptive());
 ipcMain.handle('browser:setKioskExam', (e, { enable, url }) => browser.setKioskExam(enable, url));
 ipcMain.handle('browser:updateBounds', (e, bounds) => browser.updateBounds(bounds));
 ipcMain.handle('browser:hideTabs', () => browser.hideAllTabs());

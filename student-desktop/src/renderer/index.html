@@ -128,6 +128,33 @@
         <!-- CONTENEDOR DE VENTANAS FLOTANTES -->
         <div id="windows-container" class="windows-container"></div>
 
+        <!-- VISOR CAUTIVO DE EXAMEN (MODO PÁGINA CAUTIVA) -->
+        <div id="captive-exam-overlay" class="captive-exam-overlay">
+            <div class="captive-top-bar">
+                <div class="captive-badge-group">
+                    <span class="captive-lock-badge">🔒 PÁGINA CAUTIVA (MODO EXAMEN)</span>
+                    <span id="captive-title-label" class="captive-title-label">Evaluación en Curso</span>
+                </div>
+                <div class="captive-url-box" id="captive-url-label" title="Navegación restringida al dominio del examen">
+                    https://...
+                </div>
+                <div class="captive-actions">
+                    <button class="captive-btn" onclick="goHomeCaptive()" title="Volver a la página inicial del examen">
+                        🏠 Inicio del Examen
+                    </button>
+                    <button class="captive-btn" onclick="reloadCaptive()" title="Recargar página actual">
+                        ↻ Recargar
+                    </button>
+                </div>
+            </div>
+            <div id="captive-webview-area" class="captive-webview-area">
+                <div class="captive-loading-msg">
+                    <h3>🔒 Cargando Evaluación Segura...</h3>
+                    <p>La navegación fuera de esta evaluación se encuentra deshabilitada.</p>
+                </div>
+            </div>
+        </div>
+
         <!-- MENÚ DE INICIO -->
         <div id="start-menu" class="start-menu">
             <div class="start-menu-header">

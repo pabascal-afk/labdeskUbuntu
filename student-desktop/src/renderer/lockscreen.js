@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             lockEl.classList.remove('show');
         }
+        if (window.syncBrowserBounds) window.syncBrowserBounds();
     });
 });
 

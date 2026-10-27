@@ -1,9 +1,19 @@
-// LabDesk Desktop Shell Renderer Logic & Window Manager
+// LabDesk Desktop Shell Renderer Logic & Hybrid Browser Manager
 
 let openWindows = new Map();
 let highestZIndex = 100;
 let currentVolume = 50;
 let isMuted = false;
+let isKioskExamActive = false;
+let activeInternalWinId = null;
+let browserState = {
+    isKioskExam: false,
+    captiveUrl: '',
+    currentCaptiveUrl: '',
+    captiveTitle: 'Evaluación en Curso',
+    externalBrowserRunning: false,
+    externalBrowserFocused: false
+};
 
 document.addEventListener('DOMContentLoaded', async () => {
     initClock();
@@ -37,7 +47,6 @@ async function initSystemInfo() {
 // ==========================================
 // AUDIO
 // ==========================================
-// SVG Helpers para iconos libres de emojis (evita cajas o tofu)
 const SVG_AUDIO_ON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
 const SVG_AUDIO_MUTED = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>`;
 
@@ -49,7 +58,6 @@ async function initAudioControls() {
     const trayWrap = document.getElementById('tray-audio-wrap');
     const usbAutoBtn = document.getElementById('btn-tray-usb-auto');
 
-    // Cargar estado inicial
     muteBtn.innerHTML = SVG_AUDIO_ON;
     if (window.labdeskAPI) {
         const state = await window.labdeskAPI.audio.get();
@@ -61,7 +69,6 @@ async function initAudioControls() {
         refreshAudioDeviceSelectors();
     }
 
-    // Toggle popup
     muteBtn.onclick = (e) => {
         e.stopPropagation();
         const willShow = !popup.classList.contains('show');
@@ -79,7 +86,6 @@ async function initAudioControls() {
         }
     });
 
-    // Botón Activar Audífonos USB automático
     if (usbAutoBtn) {
         usbAutoBtn.onclick = async (e) => {
             e.stopPropagation();
@@ -97,7 +103,6 @@ async function initAudioControls() {
         };
     }
 
-    // Deslizador
     slider.oninput = (e) => {
         const val = parseInt(e.target.value, 10);
         volText.textContent = `${val}%`;
@@ -107,7 +112,6 @@ async function initAudioControls() {
         if (window.labdeskAPI) window.labdeskAPI.audio.set(val);
     };
 
-    // Doble clic en icono de silencio
     muteBtn.ondblclick = async () => {
         if (window.labdeskAPI) {
             const res = await window.labdeskAPI.audio.toggleMute();
@@ -163,7 +167,7 @@ async function refreshAudioDeviceSelectors() {
                 }
             };
         }
-    } catch(e) {
+    } catch (e) {
         console.error('Error refreshing audio devices:', e);
     }
 }
@@ -177,6 +181,10 @@ function initStartMenu() {
 
     btnStart.onclick = (e) => {
         e.stopPropagation();
+        if (isKioskExamActive) {
+            showTeacherAnnouncement('🔒 Modo Examen activo: El menú de aplicaciones está deshabilitado durante la evaluación.');
+            return;
+        }
         menu.classList.toggle('show');
         syncBrowserBounds();
     };
@@ -191,15 +199,19 @@ function initStartMenu() {
     });
 }
 
-function clearGoogleSessionPrompt() {
-    if (confirm('¿Cerrar sesión de Google y limpiar datos de navegación en este puesto?')) {
-        if (window.labdeskAPI) window.labdeskAPI.browser.clearSession();
-        alert('Sesión de Google cerrada exitosamente.');
+async function clearGoogleSessionPrompt() {
+    document.getElementById('start-menu').classList.remove('show');
+    if (confirm('¿Cerrar sesión de Google y limpiar todas las cuentas y datos de navegación en este puesto?')) {
+        if (window.labdeskAPI) {
+            await window.labdeskAPI.browser.clearSession();
+        }
+        showTeacherAnnouncement('🧹 Sesión de Google y datos del navegador eliminados correctamente.');
     }
+    syncBrowserBounds();
 }
 
 // ==========================================
-// GESTOR DE VENTANAS (WINDOW MANAGER)
+// GESTOR DE APLICACIONES Y NAVEGADOR HÍBRIDO
 // ==========================================
 const APPS_META = {
     writer: {
@@ -223,13 +235,6 @@ const APPS_META = {
         w: 920,
         h: 620
     },
-    browser: {
-        title: 'Navegador Educativo',
-        icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px;"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>',
-        url: 'apps/browser/index.html',
-        w: 980,
-        h: 640
-    },
     files: {
         title: 'Mis Trabajos',
         icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>',
@@ -239,53 +244,115 @@ const APPS_META = {
     }
 };
 
-let isKioskExamActive = false;
+const BROWSER_ICON_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px;"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>';
 
-function applyKioskModeState(isKiosk) {
-    isKioskExamActive = !!isKiosk;
-    const win = document.getElementById('win_browser');
-    if (!win) return;
+function applyBrowserState(state) {
+    if (!state) return;
+    browserState = state;
+    isKioskExamActive = !!state.isKioskExam;
 
-    const minBtn = win.querySelector('.win-btn-min');
-    const maxBtn = win.querySelector('.win-btn-max');
-    const closeBtn = win.querySelector('.win-btn-close');
+    const captiveOverlay = document.getElementById('captive-exam-overlay');
+    const titleLabel = document.getElementById('captive-title-label');
+    const urlLabel = document.getElementById('captive-url-label');
 
     if (isKioskExamActive) {
-        if (minBtn) minBtn.style.display = 'none';
-        if (closeBtn) closeBtn.style.display = 'none';
-        if (maxBtn) maxBtn.style.display = 'none';
+        // Cerrar menú de inicio y minimizar ventanas internas durante el examen
+        document.getElementById('start-menu').classList.remove('show');
+        openWindows.forEach((wData) => {
+            if (wData.element) wData.element.style.display = 'none';
+        });
+        activeInternalWinId = null;
 
-        win.style.width = '100vw';
-        win.style.height = 'calc(100vh - 48px)';
-        win.style.left = '0px';
-        win.style.top = '0px';
-        bringToFront(win);
-        win.classList.add('window-kiosk-locked');
+        if (titleLabel) titleLabel.textContent = state.captiveTitle || 'Evaluación en Curso';
+        if (urlLabel) urlLabel.textContent = state.currentCaptiveUrl || state.captiveUrl || '';
+        if (captiveOverlay) captiveOverlay.classList.add('show');
     } else {
-        if (minBtn) minBtn.style.display = 'flex';
-        if (closeBtn) closeBtn.style.display = 'flex';
-        if (maxBtn) maxBtn.style.display = 'flex';
-        win.classList.remove('window-kiosk-locked');
+        if (captiveOverlay) captiveOverlay.classList.remove('show');
     }
+
+    updateExternalBrowserTaskbar(state);
     syncBrowserBounds();
 }
 
+function updateExternalBrowserTaskbar(state) {
+    const container = document.getElementById('taskbar-apps');
+    let item = document.getElementById('taskbar-item-external-browser');
+
+    if (state.externalBrowserRunning && !state.isKioskExam) {
+        if (!item) {
+            item = document.createElement('div');
+            item.id = 'taskbar-item-external-browser';
+            item.className = 'taskbar-item';
+            item.innerHTML = `<span>${BROWSER_ICON_SVG}</span> <span>Navegador Web</span>`;
+            item.onclick = () => {
+                if (browserState.externalBrowserFocused && !activeInternalWinId) {
+                    window.labdeskAPI.browser.minimizeExternal();
+                } else {
+                    // Minimizar ventanas internas de LabDesk para ver el navegador estándar
+                    openWindows.forEach((wData, wId) => {
+                        wData.element.style.display = 'none';
+                        const tItem = document.querySelector(`.taskbar-item[data-win-id="${wId}"]`);
+                        if (tItem) tItem.classList.remove('active');
+                    });
+                    activeInternalWinId = null;
+                    window.labdeskAPI.browser.focusExternal();
+                }
+            };
+            container.prepend(item);
+        }
+        const isBrowserActive = state.externalBrowserFocused && !activeInternalWinId;
+        item.classList.toggle('active', isBrowserActive);
+    } else if (item) {
+        item.remove();
+    }
+}
+
+function goHomeCaptive() {
+    if (window.labdeskAPI) {
+        window.labdeskAPI.browser.goHomeCaptive();
+    }
+}
+
+function reloadCaptive() {
+    if (window.labdeskAPI) {
+        window.labdeskAPI.browser.reloadCaptive();
+    }
+}
+
 function openApp(appKey, customUrl = null) {
-    if (isKioskExamActive && appKey !== 'browser') {
+    document.getElementById('start-menu').classList.remove('show');
+
+    if (isKioskExamActive) {
         showTeacherAnnouncement('🔒 Modo Examen (Página Cautiva) activo: Solo se permite la ventana de evaluación.');
+        syncBrowserBounds();
         return;
     }
-    document.getElementById('start-menu').classList.remove('show');
+
+    // Si es el navegador en modo normal, lanzar el navegador estándar del sistema (Chromium/Firefox)
+    if (appKey === 'browser') {
+        openWindows.forEach((wData, wId) => {
+            wData.element.style.display = 'none';
+            const tItem = document.querySelector(`.taskbar-item[data-win-id="${wId}"]`);
+            if (tItem) tItem.classList.remove('active');
+        });
+        activeInternalWinId = null;
+
+        if (window.labdeskAPI) {
+            window.labdeskAPI.browser.openTab(customUrl || 'https://www.google.com', false);
+        }
+        syncBrowserBounds();
+        return;
+    }
+
     const meta = APPS_META[appKey];
     if (!meta) return;
 
     const winId = `win_${appKey}`;
 
-    // Si ya existe la ventana, traer al frente
     if (openWindows.has(winId)) {
         const winEl = openWindows.get(winId).element;
-        bringToFront(winEl);
         if (winEl.style.display === 'none') winEl.style.display = 'flex';
+        bringToFront(winEl);
         return;
     }
 
@@ -293,10 +360,7 @@ function openApp(appKey, customUrl = null) {
 }
 
 function openGoogleApp(googleUrl) {
-    openApp('browser');
-    if (window.labdeskAPI) {
-        window.labdeskAPI.browser.openTab(googleUrl);
-    }
+    openApp('browser', googleUrl);
 }
 
 function createWindowElement(winId, meta, initialUrl) {
@@ -327,109 +391,64 @@ function createWindowElement(winId, meta, initialUrl) {
         </div>
     `;
 
-    // Eventos de control de ventana
     win.querySelector('.win-btn-close').onclick = () => closeWindow(winId);
     win.querySelector('.win-btn-min').onclick = () => minimizeWindow(winId);
     win.querySelector('.win-btn-max').onclick = () => toggleMaximizeWindow(winId);
 
-    // Arrastre por la barra de título
     setupWindowDrag(win);
-
     win.onmousedown = () => bringToFront(win);
 
     container.appendChild(win);
+    openWindows.set(winId, { element: win, meta, isMaximized: false });
 
-    // Añadir a la barra de tareas
     addTaskbarItem(winId, meta);
-
-    if (winId === 'win_browser') {
-        // En el navegador, abrir maximizado por defecto para mejor experiencia visual
-        win.style.width = '100vw';
-        win.style.height = 'calc(100vh - 48px)';
-        win.style.left = '0px';
-        win.style.top = '0px';
-        openWindows.set(winId, { element: win, meta, isMaximized: true, prevLeft: '40px', prevTop: '30px' });
-        if (isKioskExamActive) {
-            applyKioskModeState(true);
-        }
-        setTimeout(syncBrowserBounds, 120);
-    } else {
-        openWindows.set(winId, { element: win, meta, isMaximized: false });
-    }
+    bringToFront(win);
 }
 
-// Sincronizar posición exacta del motor de navegación con la ventana flotante
+// Sincronizar capas (Menú Inicio / Audio / Ventanas Internas / Visor Cautivo)
 function syncBrowserBounds() {
-    const win = document.getElementById('win_browser');
-    if (!win || !window.labdeskAPI) return;
+    if (!window.labdeskAPI) return;
 
-    if (win.style.display === 'none') {
-        window.labdeskAPI.browser.hideTabs();
-        return;
-    }
-
-    // Si el menú de inicio o el popup de audio están abiertos, ocultar la vista nativa del navegador
-    // para que NO tape el menú de inicio ni los controles de volumen/dispositivos
     const startMenu = document.getElementById('start-menu');
     const isStartMenuOpen = startMenu && startMenu.classList.contains('show');
 
     const audioPopup = document.getElementById('tray-audio-popup');
     const isAudioPopupOpen = audioPopup && audioPopup.classList.contains('show');
 
-    const lockOverlay = document.getElementById('screen-lock');
+    const lockOverlay = document.getElementById('lockscreen');
     const isLocked = lockOverlay && lockOverlay.classList.contains('show');
 
-    if (isStartMenuOpen || isAudioPopupOpen || isLocked) {
-        window.labdeskAPI.browser.hideTabs();
+    // Caso 1: Modo Examen (Página Cautiva) Activo
+    if (isKioskExamActive) {
+        if (isStartMenuOpen || isAudioPopupOpen || isLocked) {
+            window.labdeskAPI.browser.hideTabs();
+            return;
+        }
+
+        const area = document.getElementById('captive-webview-area');
+        if (area) {
+            const rect = area.getBoundingClientRect();
+            const x = Math.max(0, Math.round(rect.left));
+            const y = Math.max(44, Math.round(rect.top));
+            const width = Math.max(100, Math.round(rect.width || window.innerWidth));
+            const height = Math.max(100, Math.round(rect.height || (window.innerHeight - 92)));
+
+            window.labdeskAPI.browser.updateBounds({ x, y, width, height });
+            window.labdeskAPI.browser.showTabs();
+        }
         return;
     }
 
-    // Si otra ventana está por encima (mayor z-index), ocultar la vista nativa para que no tape las otras apps
-    let isCovered = false;
-    const myZ = parseInt(win.style.zIndex || '0', 10);
-    openWindows.forEach((wData, wId) => {
-        if (wId !== 'win_browser' && wData.element && wData.element.style.display !== 'none') {
-            const otherZ = parseInt(wData.element.style.zIndex || '0', 10);
-            if (otherZ > myZ) isCovered = true;
+    // Caso 2: Modo Normal (Convivencia con navegador estándar y apps de LabDesk)
+    let hasVisibleInternalWindow = false;
+    openWindows.forEach((wData) => {
+        if (wData.element && wData.element.style.display !== 'none') {
+            hasVisibleInternalWindow = true;
         }
     });
 
-    if (isCovered) {
-        window.labdeskAPI.browser.hideTabs();
-        return;
-    }
-
-    // Calcular coordenadas exactas relativas a la pantalla de la ventana
-    const winRect = win.getBoundingClientRect();
-    const titleBarHeight = 38;
-
-    // Intentar medir el contenedor webview-placeholder dentro del iframe con precisión de píxel
-    const iframe = win.querySelector('.window-iframe');
-    try {
-        if (iframe && iframe.contentDocument) {
-            const placeholder = iframe.contentDocument.getElementById('webview-placeholder');
-            if (placeholder) {
-                const pRect = placeholder.getBoundingClientRect();
-                const x = Math.max(0, Math.round(winRect.left + pRect.left));
-                const y = Math.max(0, Math.round(winRect.top + titleBarHeight + pRect.top));
-                const width = Math.max(50, Math.round(pRect.width));
-                const height = Math.max(50, Math.round(pRect.height));
-
-                window.labdeskAPI.browser.updateBounds({ x, y, width, height });
-                window.labdeskAPI.browser.showTabs();
-                return;
-            }
-        }
-    } catch(e) {}
-
-    const browserControlsHeight = isKioskExamActive ? 82 : 112;
-    const x = Math.max(0, Math.round(winRect.left));
-    const y = Math.max(0, Math.round(winRect.top + titleBarHeight + browserControlsHeight));
-    const width = Math.max(50, Math.round(winRect.width));
-    const height = Math.max(50, Math.round(winRect.height - titleBarHeight - browserControlsHeight));
-
-    window.labdeskAPI.browser.updateBounds({ x, y, width, height });
-    window.labdeskAPI.browser.showTabs();
+    const needsLabDeskOnTop = isStartMenuOpen || isAudioPopupOpen || isLocked || hasVisibleInternalWindow;
+    window.labdeskAPI.system.setOverlayMode(needsLabDeskOnTop, !needsLabDeskOnTop);
 }
 window.syncBrowserBounds = syncBrowserBounds;
 window.addEventListener('resize', syncBrowserBounds);
@@ -437,6 +456,8 @@ window.addEventListener('resize', syncBrowserBounds);
 function bringToFront(winEl) {
     winEl.style.zIndex = ++highestZIndex;
     const winId = winEl.id;
+    activeInternalWinId = winId;
+
     document.querySelectorAll('.taskbar-item').forEach(item => {
         item.classList.toggle('active', item.dataset.winId === winId);
     });
@@ -444,10 +465,6 @@ function bringToFront(winEl) {
 }
 
 function closeWindow(winId) {
-    if (isKioskExamActive && winId === 'win_browser') {
-        showTeacherAnnouncement('🔒 La ventana de evaluación no se puede cerrar durante el examen.');
-        return;
-    }
     if (!openWindows.has(winId)) return;
     const winEl = openWindows.get(winId).element;
     winEl.remove();
@@ -456,15 +473,14 @@ function closeWindow(winId) {
     const taskItem = document.querySelector(`.taskbar-item[data-win-id="${winId}"]`);
     if (taskItem) taskItem.remove();
 
-    if (winId === 'win_browser' && window.labdeskAPI) {
-        window.labdeskAPI.browser.hideTabs();
+    if (activeInternalWinId === winId) {
+        activeInternalWinId = null;
     }
+    updateExternalBrowserTaskbar(browserState);
+    syncBrowserBounds();
 }
 
 function minimizeWindow(winId) {
-    if (isKioskExamActive && winId === 'win_browser') {
-        return;
-    }
     if (!openWindows.has(winId)) return;
     const winEl = openWindows.get(winId).element;
     winEl.style.display = 'none';
@@ -472,6 +488,10 @@ function minimizeWindow(winId) {
     const taskItem = document.querySelector(`.taskbar-item[data-win-id="${winId}"]`);
     if (taskItem) taskItem.classList.remove('active');
 
+    if (activeInternalWinId === winId) {
+        activeInternalWinId = null;
+    }
+    updateExternalBrowserTaskbar(browserState);
     syncBrowserBounds();
 }
 
@@ -495,9 +515,6 @@ function toggleMaximizeWindow(winId) {
         winEl.style.top = '0px';
         data.isMaximized = true;
     }
-    if (winId === 'win_browser') {
-        setTimeout(syncBrowserBounds, 60);
-    }
 }
 
 function addTaskbarItem(winId, meta) {
@@ -512,7 +529,7 @@ function addTaskbarItem(winId, meta) {
         if (winEl.style.display === 'none') {
             winEl.style.display = 'flex';
             bringToFront(winEl);
-        } else if (winEl.style.zIndex == highestZIndex) {
+        } else if (activeInternalWinId === winId) {
             minimizeWindow(winId);
         } else {
             bringToFront(winEl);
@@ -543,18 +560,12 @@ function setupWindowDrag(winEl) {
         const dy = e.clientY - startY;
         winEl.style.left = `${Math.max(0, initialX + dx)}px`;
         winEl.style.top = `${Math.max(0, initialY + dy)}px`;
-        if (winEl.id === 'win_browser') {
-            syncBrowserBounds();
-        }
     };
 
     document.onmouseup = () => {
         if (isDragging) {
             isDragging = false;
             document.body.style.cursor = 'default';
-            if (winEl.id === 'win_browser') {
-                syncBrowserBounds();
-            }
         }
     };
 }
@@ -565,38 +576,33 @@ function setupWindowDrag(winEl) {
 function initRemoteListeners() {
     if (!window.labdeskAPI) return;
 
-    // Estado del servidor
     window.labdeskAPI.connection.onServerConnectionChanged(({ connected }) => {
         const dot = document.getElementById('conn-dot');
         dot.className = `status-dot ${connected ? 'dot-online' : 'dot-offline'}`;
     });
 
-    // Estado y pestañas del navegador
     window.labdeskAPI.browser.onStateChanged((state) => {
-        applyKioskModeState(state.isKioskExam);
+        applyBrowserState(state);
     });
 
-    // Orden remota del docente para abrir una pestaña o página cautiva
     window.labdeskAPI.browser.onRemoteOpenUrl((payload) => {
-        openApp('browser');
-        if (payload.url) {
-            window.labdeskAPI.browser.openTab(payload.url, payload.isKiosk);
-        }
+        if (!payload || !payload.url) return;
         if (payload.isKiosk) {
-            applyKioskModeState(true);
+            window.labdeskAPI.browser.openTab(payload.url, true);
+        } else {
+            openApp('browser', payload.url);
         }
     });
 
-    // Cambios de audio
     window.labdeskAPI.audio.onStateChanged((state) => {
         currentVolume = state.volume;
         isMuted = state.isMuted;
         document.getElementById('tray-vol-slider').value = currentVolume;
         document.getElementById('audio-vol-text').textContent = `${currentVolume}%`;
-        document.getElementById('btn-tray-mute').textContent = isMuted ? '🔇' : '🔊';
+        const muteBtn = document.getElementById('btn-tray-mute');
+        if (muteBtn) muteBtn.innerHTML = isMuted ? SVG_AUDIO_MUTED : SVG_AUDIO_ON;
     });
 
-    // Avisos del profesor en pantalla
     window.labdeskAPI.system.onAnnouncement((msg) => {
         showTeacherAnnouncement(msg);
     });
@@ -627,5 +633,5 @@ function showTeacherAnnouncement(msg) {
 
 function escapeHtml(str) {
     if (!str) return '';
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

@@ -150,12 +150,24 @@ class LabDeskAgent {
 
     setLocked(locked, pin, message) {
         this.isLocked = locked;
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+            if (locked) {
+                this.mainWindow.setAlwaysOnTop(true, 'screen-saver');
+                this.mainWindow.focus();
+                this.mainWindow.moveTop();
+            } else if (!browser.isKioskExam) {
+                this.mainWindow.setAlwaysOnTop(false);
+            }
+        }
         this.sendToRenderer('screen_lock_state', { locked, pin: pin || '2846', message: message || 'Atención a la pizarra' });
     }
 
     notifyLocalUnlock() {
         this.isLocked = false;
         browser.setKioskExam(false);
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+            this.mainWindow.setAlwaysOnTop(false);
+        }
         if (this.socket && this.socket.connected) {
             this.socket.emit('local_unlock');
         }

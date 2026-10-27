@@ -117,11 +117,42 @@ if [ -z "$SERVER_URL" ]; then
 fi
 
 echo "=========================================="
-echo "🚀 Actualizando LabDesk Estudiante..."
+echo "🚀 Actualizando LabDesk Estudiante (Motor Híbrido)..."
 echo "🌐 Servidor: $SERVER_URL"
 echo "=========================================="
 
+# 1. Asegurar herramientas de ventana y navegador estándar si hay sudo sin clave
+if ! command -v wmctrl >/dev/null 2>&1 || ! command -v xdotool >/dev/null 2>&1; then
+    sudo -n apt-get update -qq 2>/dev/null || true
+    sudo -n apt-get install -y -qq wmctrl xdotool 2>/dev/null || true
+fi
+if ! command -v chromium >/dev/null 2>&1 && ! command -v chromium-browser >/dev/null 2>&1 && ! command -v google-chrome >/dev/null 2>&1 && ! command -v firefox >/dev/null 2>&1; then
+    echo "📦 Instalando navegador estándar..."
+    sudo -n apt-get install -y -qq chromium 2>/dev/null || sudo -n apt-get install -y -qq firefox-esr 2>/dev/null || sudo -n apt-get install -y -qq firefox 2>/dev/null || true
+fi
+
+# 2. Configurar margen inferior de 48px en Openbox para barra de tareas de LabDesk
+mkdir -p "$HOME/.config/openbox"
+RC_XML="$HOME/.config/openbox/rc.xml"
+if [ ! -f "$RC_XML" ]; then
+cat << 'EOF' > "$RC_XML"
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <margins>
+    <top>0</top>
+    <bottom>48</bottom>
+    <left>0</left>
+    <right>0</right>
+  </margins>
+</openbox_config>
+EOF
+fi
+openbox --reconfigure 2>/dev/null || true
+
+# 3. Descargar y extraer nueva versión
 mkdir -p /opt/labdesk/student-desktop
+rm -rf /opt/labdesk/student-desktop/src/renderer/apps/browser 2>/dev/null || true
+
 if curl -fsSL "$SERVER_URL/student-desktop.tar.gz" | tar -xz -C /opt/labdesk/student-desktop; then
     echo "✅ Archivos descargados y extraídos correctamente."
     echo "🔄 Reiniciando interfaz de usuario..."
