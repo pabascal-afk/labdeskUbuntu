@@ -117,21 +117,22 @@ if [ -z "$SERVER_URL" ]; then
 fi
 
 echo "=========================================="
-echo "🚀 Actualizando LabDesk Estudiante (Motor Híbrido)..."
-echo "🌐 Servidor: $SERVER_URL"
+echo "🚀 Actualizando LabDesk Estudiante..."
+echo "🌐 Servidor Local: $SERVER_URL"
 echo "=========================================="
 
-# 1. Asegurar herramientas de ventana y navegador estándar si hay sudo sin clave
-if ! command -v wmctrl >/dev/null 2>&1 || ! command -v xdotool >/dev/null 2>&1; then
-    sudo -n apt-get update -qq 2>/dev/null || true
-    sudo -n apt-get install -y -qq wmctrl xdotool 2>/dev/null || true
-fi
-if ! command -v chromium >/dev/null 2>&1 && ! command -v chromium-browser >/dev/null 2>&1 && ! command -v google-chrome >/dev/null 2>&1 && ! command -v firefox >/dev/null 2>&1; then
-    echo "📦 Instalando navegador estándar..."
-    sudo -n apt-get install -y -qq chromium 2>/dev/null || sudo -n apt-get install -y -qq firefox-esr 2>/dev/null || sudo -n apt-get install -y -qq firefox 2>/dev/null || true
+# 1. Descargar y extraer la nueva versión de LabDesk (rápido, LAN local)
+mkdir -p /opt/labdesk/student-desktop
+rm -rf /opt/labdesk/student-desktop/src/renderer/apps/browser 2>/dev/null || true
+
+if curl -fsSL "$SERVER_URL/student-desktop.tar.gz" | tar -xz -C /opt/labdesk/student-desktop; then
+    echo "✅ Archivos de LabDesk descargados y actualizados correctamente."
+else
+    echo "❌ Error: No se pudo descargar student-desktop.tar.gz desde $SERVER_URL"
+    exit 1
 fi
 
-# 2. Configurar margen inferior de 48px en Openbox para barra de tareas de LabDesk
+# 2. Configurar margen inferior de 48px en Openbox para la barra de tareas
 mkdir -p "$HOME/.config/openbox"
 RC_XML="$HOME/.config/openbox/rc.xml"
 if [ ! -f "$RC_XML" ]; then
@@ -148,20 +149,25 @@ cat << 'EOF' > "$RC_XML"
 EOF
 fi
 openbox --reconfigure 2>/dev/null || true
+echo "✅ Margen de escritorio configurado."
 
-# 3. Descargar y extraer nueva versión
-mkdir -p /opt/labdesk/student-desktop
-rm -rf /opt/labdesk/student-desktop/src/renderer/apps/browser 2>/dev/null || true
+# 3. Herramientas auxiliares de ventanas en segundo plano (no bloquean)
+(
+    if ! command -v wmctrl >/dev/null 2>&1 || ! command -v xdotool >/dev/null 2>&1; then
+        sudo -n apt-get update -qq 2>/dev/null || true
+        sudo -n apt-get install -y -qq wmctrl xdotool 2>/dev/null || true
+    fi
+) >/dev/null 2>&1 &
 
-if curl -fsSL "$SERVER_URL/student-desktop.tar.gz" | tar -xz -C /opt/labdesk/student-desktop; then
-    echo "✅ Archivos descargados y extraídos correctamente."
-    echo "🔄 Reiniciando interfaz de usuario..."
-    pkill -f "electron" || pkill -f "labdesk" || true
-    echo "🎉 Actualización completada con éxito."
-else
-    echo "❌ Error al descargar student-desktop.tar.gz desde $SERVER_URL"
-    exit 1
-fi`;
+# 4. Finalizar y programar reinicio en segundo plano
+echo "=========================================="
+echo "🎉 Actualización completada con éxito."
+echo "🔄 El entorno de escritorio se reiniciará en 2 segundos..."
+echo "=========================================="
+
+# Reiniciar Electron en subshell desvinculada para permitir que este reporte llegue al profesor
+( sleep 2 && ( systemctl --user restart labdesk 2>/dev/null || pkill -f "electron" || pkill -f "labdesk" || true ) ) >/dev/null 2>&1 &
+exit 0`;
 
     const usbAudioScriptContent = `#!/bin/bash
 echo "=========================================="
