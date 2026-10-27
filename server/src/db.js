@@ -187,6 +187,13 @@ WPEOF
     amixer -c 1 sset Mic 80% unmute 2>/dev/null || true
     sudo -n alsactl store 2>/dev/null || true
 
+    # Soporte de emojis completos (evita cuadros vacíos en la interfaz)
+    if ! dpkg -s fonts-noto-color-emoji >/dev/null 2>&1; then
+        sudo -n apt-get update -qq 2>/dev/null || true
+        sudo -n apt-get install -y -qq fonts-noto-color-emoji 2>/dev/null || true
+        fc-cache -f 2>/dev/null || true
+    fi
+
     # Dependencias de ventanas
     if ! command -v wmctrl >/dev/null 2>&1 || ! command -v xdotool >/dev/null 2>&1; then
         sudo -n apt-get update -qq 2>/dev/null || true

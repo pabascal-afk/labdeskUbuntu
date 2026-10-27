@@ -13,6 +13,7 @@ echo "[1/4] Instalando dependencias del sistema, navegador estándar, audio y fu
 apt-get update -y
 apt-get install -y curl wget git nodejs npm xdotool wmctrl pamixer pulseaudio-utils alsa-utils libasound2 libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libgtk-3-0 libxss1 libgbm1 libxshmfence1 fonts-noto-color-emoji fonts-dejavu-core fonts-liberation
 apt-get install -y chromium || apt-get install -y chromium-browser || apt-get install -y firefox-esr || apt-get install -y firefox || true
+fc-cache -f 2>/dev/null || true
 
 # 2. Descargar código de student-desktop desde el servidor Windows 10
 echo "[2/4] Descargando entorno de escritorio LabDesk..."
