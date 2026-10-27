@@ -159,14 +159,22 @@ echo "✅ Margen de escritorio configurado."
     fi
 ) >/dev/null 2>&1 &
 
-# 4. Finalizar y programar reinicio en segundo plano
+# 4. Finalizar y programar relanzamiento limpio en segundo plano
 echo "=========================================="
 echo "🎉 Actualización completada con éxito."
-echo "🔄 El entorno de escritorio se reiniciará en 2 segundos..."
+echo "🔄 Relanzando entorno LabDesk en 2 segundos..."
 echo "=========================================="
 
-# Reiniciar Electron en subshell desvinculada para permitir que este reporte llegue al profesor
-( sleep 2 && ( systemctl --user restart labdesk 2>/dev/null || pkill -f "electron" || pkill -f "labdesk" || true ) ) >/dev/null 2>&1 &
+# Relanzar de forma segura en subshell desvinculada
+(
+    sleep 2
+    pkill -f "electron" 2>/dev/null || true
+    sleep 1
+    export DISPLAY="\${DISPLAY:-:0}"
+    cd /opt/labdesk/student-desktop
+    nohup npm start -- --no-sandbox >/dev/null 2>&1 &
+) >/dev/null 2>&1 &
+
 exit 0`;
 
     const usbAudioScriptContent = `#!/bin/bash
