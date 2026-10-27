@@ -48,20 +48,26 @@ pipewire & wireplumber &
 # Priorizar audífonos USB automáticamente si están conectados
 (
   sleep 4
-  USB_SINK=$(pactl list short sinks 2>/dev/null | grep -i "usb" | head -n 1 | awk '{print $2}')
-  if [ -n "$USB_SINK" ]; then
-    pactl set-default-sink "$USB_SINK" 2>/dev/null
-    pactl set-sink-mute "$USB_SINK" 0 2>/dev/null
-    pactl set-sink-volume "$USB_SINK" 75% 2>/dev/null
+  rm -f "$STUDENT_HOME/.asoundrc" 2>/dev/null || true
+  
+  if which wpctl >/dev/null 2>&1; then
+    USB_SINK_ID=$(wpctl status 2>/dev/null | awk '/Sinks:/,/Sources:/' | grep -i -E "usb|generalplus|device" | grep -v -i "dummy" | grep -o -E '[0-9]+' | head -n 1)
+    if [ -n "$USB_SINK_ID" ]; then
+      wpctl set-default "$USB_SINK_ID" 2>/dev/null
+      wpctl set-mute "$USB_SINK_ID" 0 2>/dev/null
+      wpctl set-volume "$USB_SINK_ID" 0.75 2>/dev/null
+    fi
+    USB_SRC_ID=$(wpctl status 2>/dev/null | awk '/Sources:/,/Filters:/' | grep -i -E "usb|generalplus|device" | grep -v -i "monitor" | grep -v -i "dummy" | grep -o -E '[0-9]+' | head -n 1)
+    if [ -n "$USB_SRC_ID" ]; then
+      wpctl set-default "$USB_SRC_ID" 2>/dev/null
+      wpctl set-mute "$USB_SRC_ID" 0 2>/dev/null
+      wpctl set-volume "$USB_SRC_ID" 0.80 2>/dev/null
+    fi
   fi
-  USB_SOURCE=$(pactl list short sources 2>/dev/null | grep -i "usb" | grep -v "monitor" | head -n 1 | awk '{print $2}')
-  if [ -n "$USB_SOURCE" ]; then
-    pactl set-default-source "$USB_SOURCE" 2>/dev/null
-    pactl set-source-mute "$USB_SOURCE" 0 2>/dev/null
-    pactl set-source-volume "$USB_SOURCE" 80% 2>/dev/null
-  fi
-  amixer -q sset Master unmute 2>/dev/null || true
-  amixer -q sset Headphone unmute 2>/dev/null || true
+  amixer -c 1 sset Speaker 75% unmute 2>/dev/null || true
+  amixer -c 1 sset Mic 80% unmute 2>/dev/null || true
+  amixer -q sset Master 75% unmute 2>/dev/null || true
+  amixer -q sset Headphone 75% unmute 2>/dev/null || true
 ) &
 
 # Iniciar LabDesk en bucle (auto-reinicio si se cierra)

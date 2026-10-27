@@ -21,10 +21,19 @@ class LinuxAudio {
         this.currentSink = null;
         this.currentSource = null;
 
+        // Limpiar cualquier archivo conflictivo ~/.asoundrc que rompa PipeWire
+        try {
+            const home = process.env.HOME || '/home/estudiante';
+            const asoundFile = `${home}/.asoundrc`;
+            if (fs.existsSync(asoundFile)) {
+                fs.unlinkSync(asoundFile);
+            }
+        } catch(e) {}
+
         // Auto-seleccionar audífonos USB en segundo plano
         setTimeout(() => {
             this.autoSelectUsb();
-        }, 2000);
+        }, 1500);
     }
 
     setVolume(level) {
@@ -240,18 +249,7 @@ class LinuxAudio {
             this.currentSink = sinkName;
             // Si es un ID numérico (wpctl)
             if (/^\d+$/.test(sinkName)) {
-                execWithEnv(`wpctl set-default ${sinkName} 2>/dev/null && wpctl set-mute ${sinkName} 0 2>/dev/null`, () => resolve(true));
-                return;
-            }
-
-            // Si es card_X (ALSA)
-            const cardMatch = String(sinkName).match(/^card_(\d+)$/);
-            if (cardMatch) {
-                const cardNum = cardMatch[1];
-                const asoundContent = `pcm.!default { type hw; card ${cardNum}; }\nctl.!default { type hw; card ${cardNum}; }\n`;
-                const asoundFile = `${process.env.HOME || '/home/estudiante'}/.asoundrc`;
-                try { fs.writeFileSync(asoundFile, asoundContent, 'utf8'); } catch(e) {}
-                execWithEnv(`amixer -c ${cardNum} sset Master 75% unmute 2>/dev/null || true`, () => resolve(true));
+                execWithEnv(`wpctl set-default ${sinkName} 2>/dev/null && wpctl set-mute ${sinkName} 0 2>/dev/null && wpctl set-volume ${sinkName} 0.75 2>/dev/null`, () => resolve(true));
                 return;
             }
 
@@ -265,7 +263,7 @@ class LinuxAudio {
         return new Promise((resolve) => {
             this.currentSource = sourceName;
             if (/^\d+$/.test(sourceName)) {
-                execWithEnv(`wpctl set-default ${sourceName} 2>/dev/null && wpctl set-mute ${sourceName} 0 2>/dev/null`, () => resolve(true));
+                execWithEnv(`wpctl set-default ${sourceName} 2>/dev/null && wpctl set-mute ${sourceName} 0 2>/dev/null && wpctl set-volume ${sourceName} 0.80 2>/dev/null`, () => resolve(true));
                 return;
             }
             execWithEnv(`pactl set-default-source "${sourceName}" 2>/dev/null && pactl set-source-mute "${sourceName}" 0 2>/dev/null`, () => resolve(true));
@@ -279,15 +277,19 @@ class LinuxAudio {
                 export XDG_RUNTIME_DIR="/run/user/$USER_UID"
                 export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
 
-                # 1. wpctl (WirePlumber / PipeWire)
+                # 1. Asegurar que NINGÚN archivo .asoundrc bloquee PipeWire
+                rm -f "$HOME/.asoundrc" 2>/dev/null || true
+
+                # 2. wpctl (WirePlumber / PipeWire)
                 if which wpctl >/dev/null 2>&1; then
-                    USB_SINK_ID=$(wpctl status 2>/dev/null | awk '/Sinks:/,/Sources:/' | grep -i "usb" | grep -o -E '[0-9]+' | head -n 1)
+                    USB_SINK_ID=$(wpctl status 2>/dev/null | awk '/Sinks:/,/Sources:/' | grep -i -E "usb|generalplus|device" | grep -v -i "dummy" | grep -o -E '[0-9]+' | head -n 1)
                     if [ -n "$USB_SINK_ID" ]; then
                         wpctl set-default "$USB_SINK_ID" 2>/dev/null
                         wpctl set-mute "$USB_SINK_ID" 0 2>/dev/null
                         wpctl set-volume "$USB_SINK_ID" 0.75 2>/dev/null
                     fi
-                    USB_SRC_ID=$(wpctl status 2>/dev/null | awk '/Sources:/,/Filters:/' | grep -i "usb" | grep -v -i "monitor" | grep -o -E '[0-9]+' | head -n 1)
+
+                    USB_SRC_ID=$(wpctl status 2>/dev/null | awk '/Sources:/,/Filters:/' | grep -i -E "usb|generalplus|device" | grep -v -i "monitor" | grep -v -i "dummy" | grep -o -E '[0-9]+' | head -n 1)
                     if [ -n "$USB_SRC_ID" ]; then
                         wpctl set-default "$USB_SRC_ID" 2>/dev/null
                         wpctl set-mute "$USB_SRC_ID" 0 2>/dev/null
@@ -295,9 +297,9 @@ class LinuxAudio {
                     fi
                 fi
 
-                # 2. pactl (PulseAudio)
+                # 3. pactl (PulseAudio)
                 if which pactl >/dev/null 2>&1; then
-                    USB_SINK=$(pactl list short sinks 2>/dev/null | grep -i "usb" | head -n 1 | awk '{print $2}')
+                    USB_SINK=$(pactl list short sinks 2>/dev/null | grep -i -E "usb|generalplus" | head -n 1 | awk '{print $2}')
                     if [ -n "$USB_SINK" ]; then
                         pactl set-default-sink "$USB_SINK" 2>/dev/null
                         pactl set-sink-mute "$USB_SINK" 0 2>/dev/null
@@ -306,7 +308,7 @@ class LinuxAudio {
                             pactl move-sink-input "$stream" "$USB_SINK" 2>/dev/null || true
                         done
                     fi
-                    USB_SOURCE=$(pactl list short sources 2>/dev/null | grep -i "usb" | grep -v "monitor" | head -n 1 | awk '{print $2}')
+                    USB_SOURCE=$(pactl list short sources 2>/dev/null | grep -i -E "usb|generalplus" | grep -v "monitor" | head -n 1 | awk '{print $2}')
                     if [ -n "$USB_SOURCE" ]; then
                         pactl set-default-source "$USB_SOURCE" 2>/dev/null
                         pactl set-source-mute "$USB_SOURCE" 0 2>/dev/null
@@ -314,23 +316,12 @@ class LinuxAudio {
                     fi
                 fi
 
-                # 3. Kernel ALSA config (~/.asoundrc)
-                USB_CARD_NUM=$(grep -E 'USB-Audio' /proc/asound/cards 2>/dev/null | head -n 1 | awk '{print $1}')
-                if [ -n "$USB_CARD_NUM" ]; then
-                    cat <<EOF > "$HOME/.asoundrc"
-pcm.!default { type hw; card $USB_CARD_NUM; }
-ctl.!default { type hw; card $USB_CARD_NUM; }
-EOF
-                    amixer -c "$USB_CARD_NUM" sset Master 75% unmute 2>/dev/null || true
-                    amixer -c "$USB_CARD_NUM" sset Speaker 75% unmute 2>/dev/null || true
-                    amixer -c "$USB_CARD_NUM" sset Headphone 75% unmute 2>/dev/null || true
-                    amixer -c "$USB_CARD_NUM" sset PCM 75% unmute 2>/dev/null || true
-                    amixer -c "$USB_CARD_NUM" sset Mic 80% unmute 2>/dev/null || true
-                fi
-
+                # 4. Desmutear hardware ALSA Generalplus (Tarjeta 1)
+                amixer -c 1 sset Speaker 75% unmute 2>/dev/null || true
+                amixer -c 1 sset Mic 80% unmute 2>/dev/null || true
+                amixer -c 1 sset Master 75% unmute 2>/dev/null || true
                 amixer -q sset Master 75% unmute 2>/dev/null || true
                 amixer -q sset Headphone 75% unmute 2>/dev/null || true
-                amixer -q sset Speaker 75% unmute 2>/dev/null || true
             `;
             execWithEnv(script, (err) => {
                 resolve(!err);
