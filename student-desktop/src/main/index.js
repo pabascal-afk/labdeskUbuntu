@@ -80,6 +80,10 @@ app.on('will-quit', () => {
 ipcMain.handle('audio:get', async () => await audio.getVolume());
 ipcMain.handle('audio:set', (e, level) => audio.setVolume(level));
 ipcMain.handle('audio:toggleMute', () => audio.toggleMute());
+ipcMain.handle('audio:getDevices', async () => await audio.getDevices());
+ipcMain.handle('audio:setSink', async (e, sinkName) => await audio.setDefaultSink(sinkName));
+ipcMain.handle('audio:setSource', async (e, sourceName) => await audio.setDefaultSource(sourceName));
+ipcMain.handle('audio:autoSelectUsb', async () => await audio.autoSelectUsb());
 
 // Sistema
 ipcMain.handle('system:info', () => ({

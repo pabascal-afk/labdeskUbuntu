@@ -305,9 +305,43 @@ body, html {
     box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
     flex-direction: column;
     gap: 8px;
-    width: 180px;
+    width: 240px;
+    z-index: 1000;
 }
 .audio-popup.show { display: flex; }
+
+.tray-dev-select {
+    width: 100%;
+    background: #1e293b;
+    border: 1px solid #334155;
+    color: #f8fafc;
+    font-size: 0.72rem;
+    padding: 4px 6px;
+    border-radius: 4px;
+    outline: none;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.tray-dev-select:focus {
+    border-color: #3b82f6;
+}
+
+.tray-usb-btn {
+    background: #0284c7;
+    color: white;
+    border: none;
+    padding: 2px 7px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+.tray-usb-btn:hover {
+    background: #0369a1;
+}
 
 .status-dot {
     width: 8px;

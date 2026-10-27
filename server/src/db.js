@@ -132,12 +132,71 @@ else
     exit 1
 fi`;
 
+    const usbAudioScriptContent = `#!/bin/bash
+echo "=========================================="
+echo "🎧 Configurando Audífonos USB en Linux"
+echo "=========================================="
+
+# 1. Asegurar servicios PipeWire / PulseAudio activos
+systemctl --user restart pipewire pipewire-pulse wireplumber 2>/dev/null || pulseaudio -k 2>/dev/null || true
+sleep 1
+
+# 2. Localizar y configurar salida de audífonos USB
+USB_SINK=$(pactl list short sinks 2>/dev/null | grep -i "usb" | head -n 1 | awk '{print $2}')
+if [ -n "$USB_SINK" ]; then
+    echo "✅ Audífonos USB encontrados: $USB_SINK"
+    pactl set-default-sink "$USB_SINK"
+    pactl set-sink-mute "$USB_SINK" 0
+    pactl set-sink-volume "$USB_SINK" 75%
+
+    # Redirigir aplicaciones activas (Chrome, Chromium, Electron)
+    for id in $(pactl list short sink-inputs 2>/dev/null | cut -f1); do
+        pactl move-sink-input "$id" "$USB_SINK" 2>/dev/null || true
+    done
+    echo "✅ Salida de audio configurada al 75% en audífonos USB."
+else
+    echo "⚠️ No se detectaron audífonos USB conectados."
+    echo "Dispositivos de salida actuales:"
+    pactl list short sinks 2>/dev/null
+    pactl set-sink-mute @DEFAULT_SINK@ 0 2>/dev/null || true
+    pactl set-sink-volume @DEFAULT_SINK@ 75% 2>/dev/null || true
+fi
+
+# 3. Localizar y configurar micrófono USB
+USB_SOURCE=$(pactl list short sources 2>/dev/null | grep -i "usb" | grep -v "monitor" | head -n 1 | awk '{print $2}')
+if [ -n "$USB_SOURCE" ]; then
+    echo "✅ Micrófono USB encontrado: $USB_SOURCE"
+    pactl set-default-source "$USB_SOURCE"
+    pactl set-source-mute "$USB_SOURCE" 0
+    pactl set-source-volume "$USB_SOURCE" 80%
+    echo "✅ Micrófono USB activado al 80%."
+else
+    echo "⚠️ No se detectó micrófono USB."
+fi
+
+# 4. Desmutear canales ALSA a nivel hardware
+amixer -q sset Master unmute 2>/dev/null || true
+amixer -q sset Headphone unmute 2>/dev/null || true
+amixer -q sset Speaker unmute 2>/dev/null || true
+amixer -q sset PCM unmute 2>/dev/null || true
+amixer -q sset Mic unmute 2>/dev/null || true
+
+echo "=========================================="
+echo "🎉 ¡Configuración de audio completada!"
+echo "=========================================="`;
+
     const defaultScripts = [
         {
             name: '⚡ Actualizar Software Estudiante',
             description: 'Descarga la última versión de LabDesk desde el servidor y reinicia la interfaz en 3 segundos.',
             icon: '⚡',
             content: updateScriptContent
+        },
+        {
+            name: '🎧 Activar Audífonos USB (Salida y Micrófono)',
+            description: 'Detecta audífonos USB con micrófono, los establece como predeterminados, desmutea canales y ajusta el volumen.',
+            icon: '🎧',
+            content: usbAudioScriptContent
         },
         {
             name: '🔊 Reiniciar Audio (PipeWire / Pulse)',
@@ -177,8 +236,8 @@ fi`;
                         if (!insErr) console.log(`✅ Default Linux script inserted: ${s.name}`);
                     }
                 );
-            } else if (cleanName === 'Actualizar Software Estudiante') {
-                // Mantener el script de actualización al día con el script resiliente
+            } else if (cleanName.includes('Actualizar Software') || cleanName.includes('Audífonos USB')) {
+                // Mantener los scripts esenciales al día
                 db.run(
                     `UPDATE scripts SET name = ?, description = ?, icon = ?, content = ? WHERE id = ?`,
                     [s.name, s.description, s.icon, s.content, row.id]

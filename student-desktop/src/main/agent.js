@@ -108,6 +108,12 @@ class LabDeskAgent {
                 result = audio.setVolume(audio.currentVolume + 5);
             } else if (command === 'volume_down') {
                 result = audio.setVolume(audio.currentVolume - 5);
+            } else if (command === 'audio_usb_auto') {
+                audio.autoSelectUsb().then(async () => {
+                    const state = await audio.getVolume();
+                    this.sendToRenderer('audio_state_changed', state);
+                    this.socket.emit('client_state', state);
+                });
             }
 
             if (result) {

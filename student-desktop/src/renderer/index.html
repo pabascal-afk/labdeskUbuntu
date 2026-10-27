@@ -241,8 +241,19 @@
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
                     </button>
                     <div id="tray-audio-popup" class="audio-popup">
-                        <label>Volumen: <span id="audio-vol-text">50%</span></label>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                            <label style="font-weight:600; font-size:0.8rem;">Volumen: <span id="audio-vol-text">50%</span></label>
+                            <button id="btn-tray-usb-auto" class="tray-usb-btn" title="Detectar y activar audífonos USB automáticamente">🎧 Activar USB</button>
+                        </div>
                         <input type="range" id="tray-vol-slider" min="0" max="100" value="50">
+
+                        <div class="tray-audio-dev-section" style="margin-top:8px; border-top:1px solid rgba(255,255,255,0.1); padding-top:6px;">
+                            <label style="font-size:0.7rem; color:#94a3b8; display:block; margin-bottom:2px;">Dispositivo de Salida:</label>
+                            <select id="tray-sink-select" class="tray-dev-select"></select>
+
+                            <label style="font-size:0.7rem; color:#94a3b8; display:block; margin-top:5px; margin-bottom:2px;">Micrófono:</label>
+                            <select id="tray-source-select" class="tray-dev-select"></select>
+                        </div>
                     </div>
                 </div>
 

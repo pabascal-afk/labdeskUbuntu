@@ -47,6 +47,7 @@ async function initAudioControls() {
     const volText = document.getElementById('audio-vol-text');
     const popup = document.getElementById('tray-audio-popup');
     const trayWrap = document.getElementById('tray-audio-wrap');
+    const usbAutoBtn = document.getElementById('btn-tray-usb-auto');
 
     // Cargar estado inicial
     muteBtn.innerHTML = SVG_AUDIO_ON;
@@ -57,17 +58,38 @@ async function initAudioControls() {
         slider.value = currentVolume;
         volText.textContent = `${currentVolume}%`;
         muteBtn.innerHTML = isMuted ? SVG_AUDIO_MUTED : SVG_AUDIO_ON;
+        refreshAudioDeviceSelectors();
     }
 
     // Toggle popup
     muteBtn.onclick = (e) => {
         e.stopPropagation();
+        const willShow = !popup.classList.contains('show');
         popup.classList.toggle('show');
+        if (willShow) refreshAudioDeviceSelectors();
     };
 
     document.addEventListener('click', (e) => {
         if (!trayWrap.contains(e.target)) popup.classList.remove('show');
     });
+
+    // Botón Activar Audífonos USB automático
+    if (usbAutoBtn) {
+        usbAutoBtn.onclick = async (e) => {
+            e.stopPropagation();
+            usbAutoBtn.textContent = '⏳ Buscando...';
+            if (window.labdeskAPI && window.labdeskAPI.audio.autoSelectUsb) {
+                await window.labdeskAPI.audio.autoSelectUsb();
+                await refreshAudioDeviceSelectors();
+                const state = await window.labdeskAPI.audio.get();
+                currentVolume = state.volume;
+                slider.value = currentVolume;
+                volText.textContent = `${currentVolume}%`;
+                muteBtn.innerHTML = SVG_AUDIO_ON;
+            }
+            usbAutoBtn.textContent = '🎧 Activar USB';
+        };
+    }
 
     // Deslizador
     slider.oninput = (e) => {
@@ -87,6 +109,57 @@ async function initAudioControls() {
             muteBtn.innerHTML = isMuted ? SVG_AUDIO_MUTED : SVG_AUDIO_ON;
         }
     };
+}
+
+async function refreshAudioDeviceSelectors() {
+    if (!window.labdeskAPI || !window.labdeskAPI.audio.getDevices) return;
+    try {
+        const { outputs, inputs, defaultSink, defaultSource } = await window.labdeskAPI.audio.getDevices();
+        const sinkSelect = document.getElementById('tray-sink-select');
+        const sourceSelect = document.getElementById('tray-source-select');
+
+        if (sinkSelect) {
+            sinkSelect.innerHTML = '';
+            if (!outputs || outputs.length === 0) {
+                sinkSelect.innerHTML = '<option value="">Salida por defecto</option>';
+            } else {
+                outputs.forEach(o => {
+                    const opt = document.createElement('option');
+                    opt.value = o.name;
+                    opt.textContent = `${o.isUsb ? '🎧' : '🔊'} ${o.description}`;
+                    if (o.isDefault || o.name === defaultSink) opt.selected = true;
+                    sinkSelect.appendChild(opt);
+                });
+            }
+            sinkSelect.onchange = async () => {
+                if (sinkSelect.value && window.labdeskAPI.audio.setSink) {
+                    await window.labdeskAPI.audio.setSink(sinkSelect.value);
+                }
+            };
+        }
+
+        if (sourceSelect) {
+            sourceSelect.innerHTML = '';
+            if (!inputs || inputs.length === 0) {
+                sourceSelect.innerHTML = '<option value="">Micrófono por defecto</option>';
+            } else {
+                inputs.forEach(i => {
+                    const opt = document.createElement('option');
+                    opt.value = i.name;
+                    opt.textContent = `${i.isUsb ? '🎤' : '🎙️'} ${i.description}`;
+                    if (i.isDefault || i.name === defaultSource) opt.selected = true;
+                    sourceSelect.appendChild(opt);
+                });
+            }
+            sourceSelect.onchange = async () => {
+                if (sourceSelect.value && window.labdeskAPI.audio.setSource) {
+                    await window.labdeskAPI.audio.setSource(sourceSelect.value);
+                }
+            };
+        }
+    } catch(e) {
+        console.error('Error refreshing audio devices:', e);
+    }
 }
 
 // ==========================================

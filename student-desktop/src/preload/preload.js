@@ -6,6 +6,10 @@ contextBridge.exposeInMainWorld('labdeskAPI', {
         get: () => ipcRenderer.invoke('audio:get'),
         set: (level) => ipcRenderer.invoke('audio:set', level),
         toggleMute: () => ipcRenderer.invoke('audio:toggleMute'),
+        getDevices: () => ipcRenderer.invoke('audio:getDevices'),
+        setSink: (sinkName) => ipcRenderer.invoke('audio:setSink', sinkName),
+        setSource: (sourceName) => ipcRenderer.invoke('audio:setSource', sourceName),
+        autoSelectUsb: () => ipcRenderer.invoke('audio:autoSelectUsb'),
         onStateChanged: (callback) => ipcRenderer.on('audio_state_changed', (e, data) => callback(data))
     },
     system: {

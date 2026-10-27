@@ -11,7 +11,7 @@ echo "=========================================================="
 # 1. Instalar librerias necesarias para Electron, fuentes tipograficas, emojis y audio
 echo "[1/4] Instalando dependencias del sistema, audio y fuentes de emojis..."
 apt-get update -y
-apt-get install -y curl wget git nodejs npm xdotool pamixer libasound2 libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libgtk-3-0 libxss1 libgbm1 libxshmfence1 fonts-noto-color-emoji fonts-dejavu-core fonts-liberation
+apt-get install -y curl wget git nodejs npm xdotool pamixer pulseaudio-utils alsa-utils libasound2 libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libgtk-3-0 libxss1 libgbm1 libxshmfence1 fonts-noto-color-emoji fonts-dejavu-core fonts-liberation
 
 # 2. Descargar código de student-desktop desde el servidor Windows 10
 echo "[2/4] Descargando entorno de escritorio LabDesk..."
@@ -44,6 +44,25 @@ xset s noblank
 
 # Iniciar audio
 pipewire & wireplumber &
+
+# Priorizar audífonos USB automáticamente si están conectados
+(
+  sleep 4
+  USB_SINK=$(pactl list short sinks 2>/dev/null | grep -i "usb" | head -n 1 | awk '{print $2}')
+  if [ -n "$USB_SINK" ]; then
+    pactl set-default-sink "$USB_SINK" 2>/dev/null
+    pactl set-sink-mute "$USB_SINK" 0 2>/dev/null
+    pactl set-sink-volume "$USB_SINK" 75% 2>/dev/null
+  fi
+  USB_SOURCE=$(pactl list short sources 2>/dev/null | grep -i "usb" | grep -v "monitor" | head -n 1 | awk '{print $2}')
+  if [ -n "$USB_SOURCE" ]; then
+    pactl set-default-source "$USB_SOURCE" 2>/dev/null
+    pactl set-source-mute "$USB_SOURCE" 0 2>/dev/null
+    pactl set-source-volume "$USB_SOURCE" 80% 2>/dev/null
+  fi
+  amixer -q sset Master unmute 2>/dev/null || true
+  amixer -q sset Headphone unmute 2>/dev/null || true
+) &
 
 # Iniciar LabDesk en bucle (auto-reinicio si se cierra)
 cd /opt/labdesk/student-desktop
