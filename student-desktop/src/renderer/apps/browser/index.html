@@ -12,58 +12,85 @@
         /* TABS BAR */
         .tabs-bar {
             background: #0b1120;
-            padding: 6px 12px 0;
+            padding: 6px 10px 0;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid #1e293b;
+            user-select: none;
+        }
+        .tabs-container {
             display: flex;
             align-items: center;
             gap: 4px;
-            border-bottom: 1px solid #1e293b;
             overflow-x: auto;
+            scrollbar-width: none;
+            flex: 1;
         }
+        .tabs-container::-webkit-scrollbar { display: none; }
+
         .tab-item {
-            background: #1e293b;
+            background: #131d31;
             color: #94a3b8;
             padding: 6px 12px;
             border-radius: 8px 8px 0 0;
             font-size: 12px;
-            display: flex;
+            display: inline-flex;
             align-items: center;
             gap: 8px;
             cursor: pointer;
-            max-width: 180px;
+            max-width: 200px;
+            min-width: 110px;
             white-space: nowrap;
             overflow: hidden;
-            text-overflow: ellipsis;
             border: 1px solid transparent;
             border-bottom: none;
+            transition: all 0.15s ease;
         }
+        .tab-item:hover { background: #1e293b; color: #e2e8f0; }
         .tab-item.active {
             background: #1e293b;
             color: #f8fafc;
             border-color: #334155;
+            border-top: 2px solid #3b82f6;
             font-weight: 600;
+        }
+        .tab-title {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            pointer-events: none;
         }
         .btn-tab-close {
             background: transparent;
             border: none;
             color: #94a3b8;
             cursor: pointer;
-            font-size: 12px;
+            font-size: 14px;
+            line-height: 1;
             border-radius: 50%;
             width: 16px;
             height: 16px;
             display: flex;
             align-items: center;
             justify-content: center;
+            transition: background 0.15s;
         }
         .btn-tab-close:hover { background: #ef4444; color: white; }
+
         .btn-add-tab {
             background: transparent;
             border: none;
             color: #94a3b8;
-            font-size: 16px;
+            font-size: 18px;
             cursor: pointer;
-            padding: 4px 8px;
-            border-radius: 4px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            margin-left: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
         }
         .btn-add-tab:hover { background: #1e293b; color: white; }
 
@@ -81,22 +108,76 @@
             border: none;
             color: #cbd5e1;
             font-size: 14px;
-            padding: 4px 8px;
-            border-radius: 4px;
+            padding: 6px 10px;
+            border-radius: 6px;
             cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s;
         }
-        .nav-btn:hover { background: #334155; color: white; }
-        .url-bar {
+        .nav-btn:hover:not(:disabled) { background: #334155; color: white; }
+        .nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .url-bar-wrap {
             flex: 1;
+            display: flex;
+            align-items: center;
+            position: relative;
+        }
+        .url-bar {
+            width: 100%;
             background: #0f172a;
             border: 1px solid #334155;
             color: white;
-            padding: 6px 14px;
+            padding: 7px 36px 7px 14px;
             border-radius: 20px;
             font-size: 13px;
             outline: none;
+            transition: border-color 0.15s;
         }
         .url-bar:focus { border-color: #3b82f6; }
+        .url-bar.kiosk-locked {
+            background: #18181b;
+            border-color: #ef4444;
+            color: #fca5a5;
+            cursor: not-allowed;
+            font-weight: 500;
+        }
+
+        .btn-nav-go {
+            position: absolute;
+            right: 6px;
+            background: transparent;
+            border: none;
+            color: #38bdf8;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 50%;
+            font-size: 13px;
+        }
+        .btn-nav-go:hover { background: #1e293b; }
+
+        /* KIOSK BADGE */
+        .badge-kiosk {
+            background: linear-gradient(135deg, #b91c1c, #dc2626);
+            color: white;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 5px 12px;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            letter-spacing: 0.5px;
+            box-shadow: 0 0 10px rgba(220, 38, 38, 0.4);
+            animation: pulseKiosk 2s infinite;
+        }
+        @keyframes pulseKiosk {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.85; }
+        }
 
         /* BOOKMARKS BAR */
         .bookmarks-bar {
@@ -105,7 +186,7 @@
             display: flex;
             align-items: center;
             gap: 6px;
-            border-bottom: 1px solid #334155;
+            border-bottom: 1px solid #1e293b;
             overflow-x: auto;
         }
         .bm-item {
@@ -113,13 +194,14 @@
             border: none;
             color: #cbd5e1;
             font-size: 11px;
-            padding: 3px 8px;
+            padding: 4px 9px;
             border-radius: 4px;
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 4px;
+            gap: 5px;
             white-space: nowrap;
+            transition: all 0.15s;
         }
         .bm-item:hover { background: #1e293b; color: white; }
 
@@ -138,32 +220,37 @@
 </head>
 <body>
     <div class="tabs-bar" id="tabs-bar">
-        <div class="tab-item active" id="tab-default">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
-            <span class="tab-title">Google</span>
-            <button class="btn-tab-close">&times;</button>
+        <div class="tabs-container" id="tabs-container">
+            <!-- Pestañas renderizadas dinámicamente -->
         </div>
-        <button class="btn-add-tab" onclick="createNewTab()">+</button>
+        <button class="btn-add-tab" id="btn-add-tab" onclick="createNewTab()" title="Nueva pestaña">+</button>
     </div>
 
     <div class="nav-controls">
-        <button class="nav-btn" onclick="historyBack()" title="Atrás">◀</button>
-        <button class="nav-btn" onclick="historyForward()" title="Adelante">▶</button>
-        <button class="nav-btn" onclick="reloadPage()" title="Recargar">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+        <button class="nav-btn" id="btn-back" onclick="historyBack()" title="Atrás">◀</button>
+        <button class="nav-btn" id="btn-forward" onclick="historyForward()" title="Adelante">▶</button>
+        <button class="nav-btn" id="btn-reload" onclick="reloadPage()" title="Recargar">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
         </button>
-        <input type="text" id="url-input" class="url-bar" value="https://www.google.com" placeholder="Buscar en Google o ingresar dirección web...">
-        <button class="nav-btn" onclick="navigateToUrl()" title="Ir">➔</button>
+
+        <div class="url-bar-wrap">
+            <input type="text" id="url-input" class="url-bar" value="https://www.google.com" placeholder="Buscar en Google o ingresar dirección web...">
+            <button class="btn-nav-go" id="btn-go" onclick="navigateToUrl()" title="Ir">➔</button>
+        </div>
+
+        <div id="kiosk-badge" class="badge-kiosk" style="display: none;">
+            <span>🔒</span> <span>Página Cautiva (Modo Examen)</span>
+        </div>
     </div>
 
-    <div class="bookmarks-bar">
-        <button class="bm-item" onclick="openBookmark('https://mail.google.com')">Gmail</button>
-        <button class="bm-item" onclick="openBookmark('https://docs.google.com')">Docs</button>
-        <button class="bm-item" onclick="openBookmark('https://sheets.google.com')">Sheets</button>
-        <button class="bm-item" onclick="openBookmark('https://slides.google.com')">Slides</button>
-        <button class="bm-item" onclick="openBookmark('https://drive.google.com')">Drive</button>
-        <button class="bm-item" onclick="openBookmark('https://classroom.google.com')">Classroom</button>
-        <button class="bm-item" onclick="openBookmark('https://es.wikipedia.org')">Wikipedia</button>
+    <div class="bookmarks-bar" id="bookmarks-bar">
+        <button class="bm-item" onclick="openBookmark('https://mail.google.com')">✉️ Gmail</button>
+        <button class="bm-item" onclick="openBookmark('https://docs.google.com')">📄 Docs</button>
+        <button class="bm-item" onclick="openBookmark('https://sheets.google.com')">📊 Sheets</button>
+        <button class="bm-item" onclick="openBookmark('https://slides.google.com')">📑 Slides</button>
+        <button class="bm-item" onclick="openBookmark('https://drive.google.com')">💾 Drive</button>
+        <button class="bm-item" onclick="openBookmark('https://classroom.google.com')">🎓 Classroom</button>
+        <button class="bm-item" onclick="openBookmark('https://es.wikipedia.org')">🌐 Wikipedia</button>
     </div>
 
     <div id="webview-placeholder" class="webview-container">
@@ -172,42 +259,146 @@
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
             </div>
             <h3>Navegador Educativo Seguro</h3>
-            <p style="margin-top:4px;">Cargando motor de navegación Chromium...</p>
+            <p style="margin-top:4px;">Cargando motor de navegación...</p>
         </div>
     </div>
 
     <script>
         const urlInput = document.getElementById('url-input');
-        let currentTabId = 'tab_1';
+        const tabsContainer = document.getElementById('tabs-container');
+        const btnAddTab = document.getElementById('btn-add-tab');
+        const bookmarksBar = document.getElementById('bookmarks-bar');
+        const kioskBadge = document.getElementById('kiosk-badge');
+        const btnGo = document.getElementById('btn-go');
+        const btnBack = document.getElementById('btn-back');
+        const btnForward = document.getElementById('btn-forward');
 
-        // Al iniciar, sincronizar vista con el proceso principal
+        let currentTabsState = {
+            tabs: [],
+            activeTabId: null,
+            isKioskExam: false,
+            captiveUrl: ''
+        };
+
         window.addEventListener('DOMContentLoaded', () => {
             initBrowser();
         });
 
-        function initBrowser() {
+        async function initBrowser() {
+            if (!window.parent || !window.parent.labdeskAPI) return;
+
+            // Escuchar cambios de estado globales del navegador
+            window.parent.labdeskAPI.browser.onStateChanged((state) => {
+                renderTabs(state);
+            });
+
+            // Obtener estado actual
+            try {
+                const state = await window.parent.labdeskAPI.browser.getState();
+                if (!state || !state.tabs || state.tabs.length === 0) {
+                    // Si no hay pestañas abiertas, abrir la inicial de Google
+                    await window.parent.labdeskAPI.browser.openTab('https://www.google.com');
+                } else {
+                    renderTabs(state);
+                }
+            } catch(e) {
+                console.error('Error al inicializar navegador:', e);
+            }
+
+            updateViewBounds();
+            window.addEventListener('resize', updateViewBounds);
+        }
+
+        function renderTabs(state) {
+            currentTabsState = state;
+            tabsContainer.innerHTML = '';
+
+            const isKiosk = !!state.isKioskExam;
+
+            // Renderizar cada pestaña
+            state.tabs.forEach((tab) => {
+                const isActive = tab.id === state.activeTabId;
+                const tabEl = document.createElement('div');
+                tabEl.className = `tab-item ${isActive ? 'active' : ''}`;
+                tabEl.dataset.tabId = tab.id;
+
+                const titleText = escapeHtml(tab.title || 'Nueva pestaña');
+
+                tabEl.innerHTML = `
+                    <span style="font-size:12px;">🌐</span>
+                    <span class="tab-title" title="${titleText}">${titleText}</span>
+                    ${!isKiosk ? `<button class="btn-tab-close" title="Cerrar pestaña">&times;</button>` : ''}
+                `;
+
+                tabEl.onclick = () => selectTab(tab.id);
+
+                if (!isKiosk) {
+                    const closeBtn = tabEl.querySelector('.btn-tab-close');
+                    if (closeBtn) {
+                        closeBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            closeTab(tab.id);
+                        };
+                    }
+                }
+
+                tabsContainer.appendChild(tabEl);
+
+                // Si es la activa, sincronizar URL
+                if (isActive) {
+                    urlInput.value = tab.url || '';
+                }
+            });
+
+            // Aplicar restricciones si es Página Cautiva (Modo Examen)
+            if (isKiosk) {
+                btnAddTab.style.display = 'none';
+                bookmarksBar.style.display = 'none';
+                kioskBadge.style.display = 'inline-flex';
+                btnGo.style.display = 'none';
+                urlInput.readOnly = true;
+                urlInput.classList.add('kiosk-locked');
+                urlInput.title = 'Navegación restringida en modo examen';
+                btnBack.disabled = true;
+                btnForward.disabled = true;
+            } else {
+                btnAddTab.style.display = 'flex';
+                bookmarksBar.style.display = 'flex';
+                kioskBadge.style.display = 'none';
+                btnGo.style.display = 'block';
+                urlInput.readOnly = false;
+                urlInput.classList.remove('kiosk-locked');
+                urlInput.title = '';
+                btnBack.disabled = false;
+                btnForward.disabled = false;
+            }
+
+            // Actualizar bounds para sincronizar el tamaño del webview
+            setTimeout(updateViewBounds, 30);
+        }
+
+        function selectTab(tabId) {
             if (window.parent && window.parent.labdeskAPI) {
-                // Registrar bounds del contenedor para WebContentsView
-                updateViewBounds();
-                window.addEventListener('resize', updateViewBounds);
-
-                // Abrir pestaña inicial
-                openBookmark('https://www.google.com');
-
-                // Escuchar navegación
-                window.parent.labdeskAPI.browser.onTabNavigated((data) => {
-                    urlInput.value = data.url;
-                });
+                window.parent.labdeskAPI.browser.setActiveTab(tabId);
             }
         }
 
-        function updateViewBounds() {
-            if (window.parent && window.parent.syncBrowserBounds) {
-                window.parent.syncBrowserBounds();
+        function closeTab(tabId) {
+            if (currentTabsState.isKioskExam) return;
+            if (window.parent && window.parent.labdeskAPI) {
+                window.parent.labdeskAPI.browser.closeTab(tabId);
+            }
+        }
+
+        function createNewTab() {
+            if (currentTabsState.isKioskExam) return;
+            if (window.parent && window.parent.labdeskAPI) {
+                window.parent.labdeskAPI.browser.openTab('https://www.google.com');
             }
         }
 
         function navigateToUrl() {
+            if (currentTabsState.isKioskExam) return;
             let val = urlInput.value.trim();
             if (!val) return;
 
@@ -219,7 +410,7 @@
 
             urlInput.value = val;
             if (window.parent && window.parent.labdeskAPI) {
-                window.parent.labdeskAPI.browser.openTab(val);
+                window.parent.labdeskAPI.browser.navigate(val);
             }
         }
 
@@ -228,26 +419,42 @@
         });
 
         function openBookmark(url) {
+            if (currentTabsState.isKioskExam) return;
             urlInput.value = url;
             if (window.parent && window.parent.labdeskAPI) {
-                window.parent.labdeskAPI.browser.openTab(url);
+                window.parent.labdeskAPI.browser.navigate(url);
             }
         }
 
-        function createNewTab() {
-            openBookmark('https://www.google.com');
-        }
-
         function historyBack() {
-            // Se puede extender con ipc
+            if (currentTabsState.isKioskExam) return;
+            if (window.parent && window.parent.labdeskAPI) {
+                window.parent.labdeskAPI.browser.goBack();
+            }
         }
 
         function historyForward() {
-            // Se puede extender con ipc
+            if (currentTabsState.isKioskExam) return;
+            if (window.parent && window.parent.labdeskAPI) {
+                window.parent.labdeskAPI.browser.goForward();
+            }
         }
 
         function reloadPage() {
-            navigateToUrl();
+            if (window.parent && window.parent.labdeskAPI) {
+                window.parent.labdeskAPI.browser.reload();
+            }
+        }
+
+        function updateViewBounds() {
+            if (window.parent && window.parent.syncBrowserBounds) {
+                window.parent.syncBrowserBounds();
+            }
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
     </script>
 </body>

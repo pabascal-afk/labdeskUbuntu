@@ -239,7 +239,42 @@ const APPS_META = {
     }
 };
 
+let isKioskExamActive = false;
+
+function applyKioskModeState(isKiosk) {
+    isKioskExamActive = !!isKiosk;
+    const win = document.getElementById('win_browser');
+    if (!win) return;
+
+    const minBtn = win.querySelector('.win-btn-min');
+    const maxBtn = win.querySelector('.win-btn-max');
+    const closeBtn = win.querySelector('.win-btn-close');
+
+    if (isKioskExamActive) {
+        if (minBtn) minBtn.style.display = 'none';
+        if (closeBtn) closeBtn.style.display = 'none';
+        if (maxBtn) maxBtn.style.display = 'none';
+
+        win.style.width = '100vw';
+        win.style.height = 'calc(100vh - 48px)';
+        win.style.left = '0px';
+        win.style.top = '0px';
+        bringToFront(win);
+        win.classList.add('window-kiosk-locked');
+    } else {
+        if (minBtn) minBtn.style.display = 'flex';
+        if (closeBtn) closeBtn.style.display = 'flex';
+        if (maxBtn) maxBtn.style.display = 'flex';
+        win.classList.remove('window-kiosk-locked');
+    }
+    syncBrowserBounds();
+}
+
 function openApp(appKey, customUrl = null) {
+    if (isKioskExamActive && appKey !== 'browser') {
+        showTeacherAnnouncement('🔒 Modo Examen (Página Cautiva) activo: Solo se permite la ventana de evaluación.');
+        return;
+    }
     document.getElementById('start-menu').classList.remove('show');
     const meta = APPS_META[appKey];
     if (!meta) return;
@@ -314,6 +349,9 @@ function createWindowElement(winId, meta, initialUrl) {
         win.style.left = '0px';
         win.style.top = '0px';
         openWindows.set(winId, { element: win, meta, isMaximized: true, prevLeft: '40px', prevTop: '30px' });
+        if (isKioskExamActive) {
+            applyKioskModeState(true);
+        }
         setTimeout(syncBrowserBounds, 120);
     } else {
         openWindows.set(winId, { element: win, meta, isMaximized: false });
@@ -364,8 +402,27 @@ function syncBrowserBounds() {
     // Calcular coordenadas exactas relativas a la pantalla de la ventana
     const winRect = win.getBoundingClientRect();
     const titleBarHeight = 38;
-    const browserControlsHeight = 74; // pestañas + url bar
 
+    // Intentar medir el contenedor webview-placeholder dentro del iframe con precisión de píxel
+    const iframe = win.querySelector('.window-iframe');
+    try {
+        if (iframe && iframe.contentDocument) {
+            const placeholder = iframe.contentDocument.getElementById('webview-placeholder');
+            if (placeholder) {
+                const pRect = placeholder.getBoundingClientRect();
+                const x = Math.max(0, Math.round(winRect.left + pRect.left));
+                const y = Math.max(0, Math.round(winRect.top + titleBarHeight + pRect.top));
+                const width = Math.max(50, Math.round(pRect.width));
+                const height = Math.max(50, Math.round(pRect.height));
+
+                window.labdeskAPI.browser.updateBounds({ x, y, width, height });
+                window.labdeskAPI.browser.showTabs();
+                return;
+            }
+        }
+    } catch(e) {}
+
+    const browserControlsHeight = isKioskExamActive ? 82 : 112;
     const x = Math.max(0, Math.round(winRect.left));
     const y = Math.max(0, Math.round(winRect.top + titleBarHeight + browserControlsHeight));
     const width = Math.max(50, Math.round(winRect.width));
@@ -387,6 +444,10 @@ function bringToFront(winEl) {
 }
 
 function closeWindow(winId) {
+    if (isKioskExamActive && winId === 'win_browser') {
+        showTeacherAnnouncement('🔒 La ventana de evaluación no se puede cerrar durante el examen.');
+        return;
+    }
     if (!openWindows.has(winId)) return;
     const winEl = openWindows.get(winId).element;
     winEl.remove();
@@ -401,6 +462,9 @@ function closeWindow(winId) {
 }
 
 function minimizeWindow(winId) {
+    if (isKioskExamActive && winId === 'win_browser') {
+        return;
+    }
     if (!openWindows.has(winId)) return;
     const winEl = openWindows.get(winId).element;
     winEl.style.display = 'none';
@@ -507,11 +571,19 @@ function initRemoteListeners() {
         dot.className = `status-dot ${connected ? 'dot-online' : 'dot-offline'}`;
     });
 
-    // Orden remota del docente para abrir una pestaña
+    // Estado y pestañas del navegador
+    window.labdeskAPI.browser.onStateChanged((state) => {
+        applyKioskModeState(state.isKioskExam);
+    });
+
+    // Orden remota del docente para abrir una pestaña o página cautiva
     window.labdeskAPI.browser.onRemoteOpenUrl((payload) => {
         openApp('browser');
         if (payload.url) {
             window.labdeskAPI.browser.openTab(payload.url, payload.isKiosk);
+        }
+        if (payload.isKiosk) {
+            applyKioskModeState(true);
         }
     });
 

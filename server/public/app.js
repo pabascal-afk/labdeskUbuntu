@@ -689,6 +689,23 @@ async function sendBrowserUrl() {
     showNotification(isKiosk ? `🔒 Página Cautiva (Modo Examen) enviada: ${url}` : `🚀 Enlace abierto en estaciones: ${url}`);
 }
 
+async function releaseKioskMode() {
+    const target = document.getElementById('browser-target-select').value;
+    const payload = { enabled: false };
+
+    if (target === 'all') {
+        await sendGlobalCommand('browser_kiosk_mode', payload);
+    } else {
+        const clientsToTarget = activeSectorId === 'all' ? currentClients : currentClients.filter(c => c.sector_id == activeSectorId);
+        for (const c of clientsToTarget) {
+            await sendCommand(c.id, 'browser_kiosk_mode', payload);
+        }
+    }
+
+    closeModal('modal-browser');
+    showNotification('🔓 Modo examen / Página Cautiva liberado en las estaciones.');
+}
+
 function openSingleTabPrompt(clientId) {
     const url = prompt('Ingresa la URL a abrir en este equipo:');
     if (!url || !url.trim()) return;

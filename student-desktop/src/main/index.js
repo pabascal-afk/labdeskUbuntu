@@ -97,8 +97,15 @@ ipcMain.handle('system:shutdown', () => system.shutdown());
 ipcMain.handle('system:reboot', () => system.reboot());
 
 // Navegador y Google
+ipcMain.handle('browser:getState', () => browser.getTabsState());
 ipcMain.handle('browser:openTab', (e, { url, isKiosk }) => browser.openTab(url, { isKiosk }));
+ipcMain.handle('browser:setActiveTab', (e, tabId) => browser.setActiveTab(tabId));
 ipcMain.handle('browser:closeTab', (e, tabId) => browser.closeTab(tabId));
+ipcMain.handle('browser:navigate', (e, url) => browser.navigate(url));
+ipcMain.handle('browser:goBack', () => browser.goBack());
+ipcMain.handle('browser:goForward', () => browser.goForward());
+ipcMain.handle('browser:reload', () => browser.reload());
+ipcMain.handle('browser:setKioskExam', (e, { enable, url }) => browser.setKioskExam(enable, url));
 ipcMain.handle('browser:updateBounds', (e, bounds) => browser.updateBounds(bounds));
 ipcMain.handle('browser:hideTabs', () => browser.hideAllTabs());
 ipcMain.handle('browser:showTabs', () => browser.showActiveTab());

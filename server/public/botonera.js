@@ -314,6 +314,13 @@ function sendCustomUrl() {
     showToast(isKiosk ? `🔒 Examen fijado: ${url}` : `🚀 Enlace abierto: ${url}`);
 }
 
+function releaseKioskFromBotonera() {
+    playHapticClick();
+    triggerAction('browser_kiosk_mode', { enabled: false });
+    closeModal('modal-link');
+    showToast('🔓 Modo examen / Página Cautiva liberado');
+}
+
 // ==============================================================
 // AVISOS EN PANTALLA
 // ==============================================================

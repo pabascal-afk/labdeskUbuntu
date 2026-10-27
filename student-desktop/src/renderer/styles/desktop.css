@@ -205,6 +205,11 @@ body, html {
     border: none;
 }
 
+.window.window-kiosk-locked .window-header {
+    background: linear-gradient(135deg, #1e1b4b, #1e293b);
+    border-bottom: 2px solid #ef4444;
+}
+
 /* BARRA DE TAREAS */
 .taskbar {
     position: absolute;

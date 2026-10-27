@@ -81,6 +81,7 @@ class LabDeskAgent {
                 this.setLocked(true, payload?.pin, payload?.message);
             } else if (command === 'unlock') {
                 this.setLocked(false);
+                browser.setKioskExam(false);
             } else if (command === 'shutdown') {
                 system.shutdown();
             } else if (command === 'reboot') {
@@ -126,8 +127,9 @@ class LabDeskAgent {
         this.socket.on('browser_command', (data) => {
             const { command, payload } = data;
             if (command === 'browser_open_url' && payload?.url) {
-                browser.openTab(payload.url, { isKiosk: payload.isKiosk });
                 this.sendToRenderer('browser_open_url_event', payload);
+            } else if (command === 'browser_kiosk_mode') {
+                browser.setKioskExam(!!payload?.enabled, payload?.url || '');
             } else if (command === 'browser_close_tab' && payload?.tabId) {
                 browser.closeTab(payload.tabId);
             }
@@ -153,6 +155,7 @@ class LabDeskAgent {
 
     notifyLocalUnlock() {
         this.isLocked = false;
+        browser.setKioskExam(false);
         if (this.socket && this.socket.connected) {
             this.socket.emit('local_unlock');
         }

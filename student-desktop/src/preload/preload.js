@@ -19,14 +19,20 @@ contextBridge.exposeInMainWorld('labdeskAPI', {
         onAnnouncement: (callback) => ipcRenderer.on('show_announcement', (e, data) => callback(data))
     },
     browser: {
+        getState: () => ipcRenderer.invoke('browser:getState'),
         openTab: (url, isKiosk) => ipcRenderer.invoke('browser:openTab', { url, isKiosk }),
+        setActiveTab: (tabId) => ipcRenderer.invoke('browser:setActiveTab', tabId),
         closeTab: (tabId) => ipcRenderer.invoke('browser:closeTab', tabId),
+        navigate: (url) => ipcRenderer.invoke('browser:navigate', url),
+        goBack: () => ipcRenderer.invoke('browser:goBack'),
+        goForward: () => ipcRenderer.invoke('browser:goForward'),
+        reload: () => ipcRenderer.invoke('browser:reload'),
+        setKioskExam: (enable, url) => ipcRenderer.invoke('browser:setKioskExam', { enable, url }),
         updateBounds: (bounds) => ipcRenderer.invoke('browser:updateBounds', bounds),
         hideTabs: () => ipcRenderer.invoke('browser:hideTabs'),
         showTabs: () => ipcRenderer.invoke('browser:showTabs'),
         clearSession: () => ipcRenderer.invoke('browser:clearSession'),
-        onTabUpdated: (callback) => ipcRenderer.on('browser_tab_updated', (e, data) => callback(data)),
-        onTabNavigated: (callback) => ipcRenderer.on('browser_tab_navigated', (e, data) => callback(data)),
+        onStateChanged: (callback) => ipcRenderer.on('browser_state_changed', (e, data) => callback(data)),
         onRemoteOpenUrl: (callback) => ipcRenderer.on('browser_open_url_event', (e, data) => callback(data))
     },
     lock: {

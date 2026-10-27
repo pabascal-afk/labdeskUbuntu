@@ -143,9 +143,12 @@
                     </select>
                 </div>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
                 <button class="btn btn-secondary" onclick="closeModal('modal-browser')">Cancelar</button>
-                <button class="btn btn-primary" id="btn-send-url">🚀 Abrir en Estaciones</button>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn btn-warning" id="btn-release-kiosk" onclick="releaseKioskMode()" title="Quita el bloqueo de examen y restablece la navegación">🔓 Liberar Página Cautiva</button>
+                    <button class="btn btn-primary" id="btn-send-url">🚀 Abrir en Estaciones</button>
+                </div>
             </div>
         </div>
     </div>

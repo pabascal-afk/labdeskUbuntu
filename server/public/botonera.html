@@ -298,9 +298,12 @@
                     </label>
                 </div>
             </div>
-            <div class="modal-bottom">
+            <div class="modal-bottom" style="display:flex; justify-content:space-between; align-items:center;">
                 <button class="btn-cancel" onclick="closeModal('modal-link')">Cancelar</button>
-                <button class="btn-action btn-send" onclick="sendCustomUrl()">🚀 Enviar a la Sala</button>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn-action" style="background:#eab308; color:#0f172a; font-weight:600;" onclick="releaseKioskFromBotonera()">🔓 Liberar Cautiva</button>
+                    <button class="btn-action btn-send" onclick="sendCustomUrl()">🚀 Enviar a la Sala</button>
+                </div>
             </div>
         </div>
     </div>
