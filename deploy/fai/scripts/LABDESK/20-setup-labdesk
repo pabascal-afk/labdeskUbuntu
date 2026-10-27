@@ -37,11 +37,29 @@ Section "ServerFlags"
 EndSection
 EOF
 
-# 4. Configurar Openbox para autoarrancar LabDesk
+# 4. Configurar Openbox y Regla de Audio WirePlumber para audífonos USB
 STUDENT_HOME="$target/home/estudiante"
 mkdir -p "$STUDENT_HOME/.config/openbox"
 mkdir -p "$STUDENT_HOME/.config/labdesk"
 mkdir -p "$STUDENT_HOME/Documentos/LabDesk"
+mkdir -p "$STUDENT_HOME/.config/wireplumber/main.lua.d"
+mkdir -p "$target/etc/wireplumber/main.lua.d"
+
+# Regla de prioridad 2000 para audífonos USB en WirePlumber
+cat << 'EOF' > "$target/etc/wireplumber/main.lua.d/99-usb-priority.lua"
+table.insert(alsa_monitor.rules, {
+  matches = {
+    { { "node.name", "matches", "alsa_output.usb*" } },
+    { { "node.name", "matches", "alsa_input.usb*" } },
+    { { "device.bus", "equals", "usb" } },
+  },
+  apply_properties = {
+    ["priority.driver"] = 2000,
+    ["priority.session"] = 2000,
+  },
+})
+EOF
+cp "$target/etc/wireplumber/main.lua.d/99-usb-priority.lua" "$STUDENT_HOME/.config/wireplumber/main.lua.d/"
 
 # Archivo de configuración con la IP del servidor
 SERVER_URL="${LABDESK_SERVER_URL:-http://192.168.3.16:3000}"

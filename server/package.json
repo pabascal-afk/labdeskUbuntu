@@ -7,7 +7,13 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js"
   },
-  "keywords": ["education", "lab-manager", "kiosk", "linux", "classroom"],
+  "keywords": [
+    "education",
+    "lab-manager",
+    "kiosk",
+    "linux",
+    "classroom"
+  ],
   "author": "LabDesk",
   "license": "MIT",
   "dependencies": {
@@ -17,5 +23,8 @@
     "socket.io": "^4.7.5",
     "sqlite3": "^5.1.7",
     "wake_on_lan": "^1.0.0"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.4"
   }
 }

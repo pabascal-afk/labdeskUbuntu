@@ -1,6 +1,7 @@
 // Linux Audio Subsystem Controller (PipeWire / WirePlumber / PulseAudio / ALSA)
 const { exec } = require('child_process');
 const fs = require('fs');
+const path = require('path');
 
 function execWithEnv(command, callback) {
     const env = Object.assign({}, process.env);
@@ -21,7 +22,22 @@ class LinuxAudio {
         this.currentSink = null;
         this.currentSource = null;
 
-        // Limpiar cualquier archivo conflictivo ~/.asoundrc que rompa PipeWire
+        // 1. Instalar regla WirePlumber de máxima prioridad (2000) para dispositivos USB
+        this.ensureWireplumberRule();
+
+        // 2. Limpiar cualquier archivo conflictivo ~/.asoundrc que rompa PipeWire
+        this.cleanConflictingAsoundrc();
+
+        // 3. Auto-seleccionar audífonos USB en segundo plano de forma escalonada
+        setTimeout(() => this.autoSelectUsb(), 1000);
+        setTimeout(() => this.autoSelectUsb(), 3500);
+        setTimeout(() => this.autoSelectUsb(), 8000);
+
+        // 4. Guardián continuo de audio (cada 20s) para auto-recuperar audífonos USB si se conectan/desconectan
+        this.startAudioWatchdog();
+    }
+
+    cleanConflictingAsoundrc() {
         try {
             const home = process.env.HOME || '/home/estudiante';
             const asoundFile = `${home}/.asoundrc`;
@@ -29,11 +45,59 @@ class LinuxAudio {
                 fs.unlinkSync(asoundFile);
             }
         } catch(e) {}
+    }
 
-        // Auto-seleccionar audífonos USB en segundo plano
-        setTimeout(() => {
-            this.autoSelectUsb();
-        }, 1500);
+    ensureWireplumberRule() {
+        try {
+            const home = process.env.HOME || '/home/estudiante';
+            const wpDir = path.join(home, '.config', 'wireplumber', 'main.lua.d');
+            const ruleFile = path.join(wpDir, '99-usb-priority.lua');
+            if (!fs.existsSync(wpDir)) {
+                fs.mkdirSync(wpDir, { recursive: true });
+            }
+            if (!fs.existsSync(ruleFile)) {
+                const luaContent = `table.insert(alsa_monitor.rules, {
+  matches = {
+    { { "node.name", "matches", "alsa_output.usb*" } },
+    { { "node.name", "matches", "alsa_input.usb*" } },
+    { { "device.bus", "equals", "usb" } },
+  },
+  apply_properties = {
+    ["priority.driver"] = 2000,
+    ["priority.session"] = 2000,
+  },
+})
+`;
+                fs.writeFileSync(ruleFile, luaContent, 'utf8');
+                execWithEnv('systemctl --user restart wireplumber 2>/dev/null || true');
+            }
+        } catch(e) {}
+    }
+
+    startAudioWatchdog() {
+        setInterval(() => {
+            this.healAudioIfNeeded();
+        }, 20000);
+    }
+
+    healAudioIfNeeded() {
+        execWithEnv(`
+            USER_UID=$(id -u)
+            export XDG_RUNTIME_DIR="/run/user/$USER_UID"
+            export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+
+            if grep -qi "usb" /proc/asound/cards 2>/dev/null; then
+                STATUS=$(wpctl status 2>/dev/null)
+                if echo "$STATUS" | grep -qi "dummy" || ! echo "$STATUS" | awk '/Sinks:/,/Sources:/' | grep -q '\\*.*USB'; then
+                    echo "HEAL_NEEDED"
+                fi
+            fi
+        `, (err, stdout) => {
+            if (!err && stdout && stdout.includes('HEAL_NEEDED')) {
+                console.log('🎧 Guardián de Audio: Reparando y activando audífonos USB automáticamente...');
+                this.autoSelectUsb();
+            }
+        });
     }
 
     setVolume(level) {
@@ -280,7 +344,16 @@ class LinuxAudio {
                 # 1. Asegurar que NINGÚN archivo .asoundrc bloquee PipeWire
                 rm -f "$HOME/.asoundrc" 2>/dev/null || true
 
-                # 2. wpctl (WirePlumber / PipeWire)
+                # 2. Si PipeWire o WirePlumber cayeron en Dummy Output, reiniciar para reenganchar hardware
+                if which wpctl >/dev/null 2>&1; then
+                    STATUS=$(wpctl status 2>/dev/null)
+                    if echo "$STATUS" | grep -qi "dummy" || ! echo "$STATUS" | grep -qi "sink"; then
+                        systemctl --user restart pipewire wireplumber 2>/dev/null || true
+                        sleep 1
+                    fi
+                fi
+
+                # 3. wpctl (WirePlumber / PipeWire nativo)
                 if which wpctl >/dev/null 2>&1; then
                     USB_SINK_ID=$(wpctl status 2>/dev/null | awk '/Sinks:/,/Sources:/' | grep -i -E "usb|generalplus|device" | grep -v -i "dummy" | grep -o -E '[0-9]+' | head -n 1)
                     if [ -n "$USB_SINK_ID" ]; then
@@ -297,7 +370,7 @@ class LinuxAudio {
                     fi
                 fi
 
-                # 3. pactl (PulseAudio)
+                # 4. pactl (PulseAudio)
                 if which pactl >/dev/null 2>&1; then
                     USB_SINK=$(pactl list short sinks 2>/dev/null | grep -i -E "usb|generalplus" | head -n 1 | awk '{print $2}')
                     if [ -n "$USB_SINK" ]; then
@@ -316,12 +389,20 @@ class LinuxAudio {
                     fi
                 fi
 
-                # 4. Desmutear hardware ALSA Generalplus (Tarjeta 1)
+                # 5. Desmutear y calibrar hardware ALSA
+                USB_CARD=$(cat /proc/asound/cards 2>/dev/null | grep -i "usb" | awk '{print $1}' | head -n 1)
+                if [ -n "$USB_CARD" ]; then
+                    amixer -c "$USB_CARD" sset Speaker 75% unmute 2>/dev/null || true
+                    amixer -c "$USB_CARD" sset Mic 80% unmute 2>/dev/null || true
+                    amixer -c "$USB_CARD" sset Master 75% unmute 2>/dev/null || true
+                fi
                 amixer -c 1 sset Speaker 75% unmute 2>/dev/null || true
                 amixer -c 1 sset Mic 80% unmute 2>/dev/null || true
-                amixer -c 1 sset Master 75% unmute 2>/dev/null || true
                 amixer -q sset Master 75% unmute 2>/dev/null || true
                 amixer -q sset Headphone 75% unmute 2>/dev/null || true
+
+                # Guardar en ALSA state si es posible
+                sudo -n alsactl store 2>/dev/null || true
             `;
             execWithEnv(script, (err) => {
                 resolve(!err);

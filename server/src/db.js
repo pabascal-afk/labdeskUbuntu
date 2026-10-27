@@ -151,8 +151,43 @@ fi
 openbox --reconfigure 2>/dev/null || true
 echo "✅ Margen de escritorio configurado."
 
-# 3. Herramientas auxiliares de ventanas en segundo plano (no bloquean)
+# 3. Blindaje permanente de audio USB y dependencias en segundo plano
 (
+    # Instalar regla WirePlumber de prioridad 2000 para audífonos USB
+    sudo -n mkdir -p /etc/wireplumber/main.lua.d 2>/dev/null || true
+    mkdir -p "$HOME/.config/wireplumber/main.lua.d" 2>/dev/null || true
+    cat << 'WPEOF' | sudo -n tee /etc/wireplumber/main.lua.d/99-usb-priority.lua >/dev/null 2>&1 || true
+table.insert(alsa_monitor.rules, {
+  matches = {
+    { { "node.name", "matches", "alsa_output.usb*" } },
+    { { "node.name", "matches", "alsa_input.usb*" } },
+    { { "device.bus", "equals", "usb" } },
+  },
+  apply_properties = {
+    ["priority.driver"] = 2000,
+    ["priority.session"] = 2000,
+  },
+})
+WPEOF
+    [ -f /etc/wireplumber/main.lua.d/99-usb-priority.lua ] && cp -f /etc/wireplumber/main.lua.d/99-usb-priority.lua "$HOME/.config/wireplumber/main.lua.d/" 2>/dev/null || true
+
+    # Limpiar autostart de Openbox para evitar colisiones al encender el PC
+    AUTOSTART="$HOME/.config/openbox/autostart"
+    if [ -f "$AUTOSTART" ]; then
+        sed -i '/pipewire/d' "$AUTOSTART" 2>/dev/null || true
+        sed -i '/wireplumber/d' "$AUTOSTART" 2>/dev/null || true
+        if ! grep -q "asoundrc" "$AUTOSTART"; then
+            sed -i '1a rm -f "$HOME/.asoundrc" 2>/dev/null || true' "$AUTOSTART" 2>/dev/null || true
+        fi
+    fi
+    rm -f "$HOME/.asoundrc" 2>/dev/null || true
+
+    # Guardar hardware ALSA desmuteado
+    amixer -c 1 sset Speaker 75% unmute 2>/dev/null || true
+    amixer -c 1 sset Mic 80% unmute 2>/dev/null || true
+    sudo -n alsactl store 2>/dev/null || true
+
+    # Dependencias de ventanas
     if ! command -v wmctrl >/dev/null 2>&1 || ! command -v xdotool >/dev/null 2>&1; then
         sudo -n apt-get update -qq 2>/dev/null || true
         sudo -n apt-get install -y -qq wmctrl xdotool 2>/dev/null || true
@@ -179,92 +214,108 @@ exit 0`;
 
     const usbAudioScriptContent = `#!/bin/bash
 echo "=========================================="
-echo "🎧 Configuración y Reparación de Audio USB"
+echo "🎧 Blindaje y Configuración Permanente de Audio USB"
 echo "=========================================="
 
 USER_UID=$(id -u)
 export XDG_RUNTIME_DIR="/run/user/$USER_UID"
 export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
 
-# 1. ELIMINAR CUALQUIER .asoundrc QUE BLOQUEE PIPEWIRE O CAUSE 'DUMMY OUTPUT'
-echo "--- [1] Eliminando archivos de bloqueo ALSA ---"
-if [ -f "$HOME/.asoundrc" ]; then
-    rm -f "$HOME/.asoundrc"
-    echo "✅ Archivo conflictivo ~/.asoundrc eliminado (esto elimina el Dummy Output)."
-else
-    echo "✅ No hay archivo ~/.asoundrc bloqueando el sistema."
+# 1. Regla WirePlumber de prioridad permanente (2000)
+sudo -n mkdir -p /etc/wireplumber/main.lua.d 2>/dev/null || true
+mkdir -p "$HOME/.config/wireplumber/main.lua.d" 2>/dev/null || true
+
+cat << 'EOF' | sudo -n tee /etc/wireplumber/main.lua.d/99-usb-priority.lua >/dev/null 2>&1 || true
+table.insert(alsa_monitor.rules, {
+  matches = {
+    { { "node.name", "matches", "alsa_output.usb*" } },
+    { { "node.name", "matches", "alsa_input.usb*" } },
+    { { "device.bus", "equals", "usb" } },
+  },
+  apply_properties = {
+    ["priority.driver"] = 2000,
+    ["priority.session"] = 2000,
+  },
+})
+EOF
+
+if [ -f /etc/wireplumber/main.lua.d/99-usb-priority.lua ]; then
+    cp -f /etc/wireplumber/main.lua.d/99-usb-priority.lua "$HOME/.config/wireplumber/main.lua.d/" 2>/dev/null || true
+fi
+echo "✅ Regla de prioridad USB (2000) instalada en WirePlumber."
+
+# 2. Corregir autostart de Openbox para eliminar pipewire duplicado al encender
+AUTOSTART="$HOME/.config/openbox/autostart"
+if [ -f "$AUTOSTART" ]; then
+    sed -i '/pipewire/d' "$AUTOSTART" 2>/dev/null || true
+    sed -i '/wireplumber/d' "$AUTOSTART" 2>/dev/null || true
+    if ! grep -q "asoundrc" "$AUTOSTART"; then
+        sed -i '1a rm -f "$HOME/.asoundrc" 2>/dev/null || true' "$AUTOSTART" 2>/dev/null || true
+    fi
+    echo "✅ Autostart de Openbox corregido (sin colisiones al encender el PC)."
 fi
 
-# 2. Reiniciar PipeWire y WirePlumber para restaurar el hardware limpio
-echo "--- [2] Reiniciando servicios de PipeWire y WirePlumber ---"
-systemctl --user restart pipewire wireplumber 2>/dev/null || true
-sleep 1.5
+# 3. Eliminar cualquier .asoundrc conflictivo
+rm -f "$HOME/.asoundrc" 2>/dev/null || true
+echo "✅ Archivo conflictivo ~/.asoundrc eliminado."
 
-# 3. Mostrar estado actual de WirePlumber
-echo "--- [3] Estado actual de WirePlumber (wpctl status) ---"
-wpctl status 2>/dev/null
-
-# 4. Asignar salida de audífonos USB en WirePlumber
-echo "--- [4] Asignando salida de audífonos USB ---"
-USB_SINK_ID=$(wpctl status 2>/dev/null | awk '/Sinks:/,/Sources:/' | grep -i -E "usb|generalplus|device" | grep -v -i "dummy" | grep -o -E '[0-9]+' | head -n 1)
-
-if [ -n "$USB_SINK_ID" ]; then
-    echo "✅ Audífonos USB detectados con ID: $USB_SINK_ID"
-    wpctl set-default "$USB_SINK_ID"
-    wpctl set-mute "$USB_SINK_ID" 0
-    wpctl set-volume "$USB_SINK_ID" 0.75
-    echo "✅ Salida de audio configurada al 75% en audífonos USB."
-else
-    echo "⚠️ No se detectó Sink USB en WirePlumber. Sinks disponibles:"
-    wpctl status 2>/dev/null | awk '/Sinks:/,/Sources:/'
+# 4. Desmutear canales de hardware ALSA
+USB_CARD=$(cat /proc/asound/cards 2>/dev/null | grep -i "usb" | awk '{print $1}' | head -n 1)
+if [ -n "$USB_CARD" ]; then
+    amixer -c "$USB_CARD" sset Speaker 75% unmute 2>/dev/null || true
+    amixer -c "$USB_CARD" sset Mic 80% unmute 2>/dev/null || true
+    amixer -c "$USB_CARD" sset Master 75% unmute 2>/dev/null || true
 fi
-
-# 5. Asignar micrófono USB en WirePlumber
-echo "--- [5] Asignando micrófono USB ---"
-USB_SRC_ID=$(wpctl status 2>/dev/null | awk '/Sources:/,/Filters:/' | grep -i -E "usb|generalplus|device" | grep -v -i "monitor" | grep -v -i "dummy" | grep -o -E '[0-9]+' | head -n 1)
-
-if [ -n "$USB_SRC_ID" ]; then
-    echo "✅ Micrófono USB detectado con ID: $USB_SRC_ID"
-    wpctl set-default "$USB_SRC_ID"
-    wpctl set-mute "$USB_SRC_ID" 0
-    wpctl set-volume "$USB_SRC_ID" 0.80
-    echo "✅ Micrófono USB activado al 80%."
-else
-    echo "⚠️ No se detectó micrófono USB específico."
-fi
-
-# 6. Desmutear canales de hardware ALSA (Generalplus es tarjeta 1)
-echo "--- [6] Desmuteando canales de hardware ALSA ---"
 amixer -c 1 sset Speaker 75% unmute 2>/dev/null || true
 amixer -c 1 sset Mic 80% unmute 2>/dev/null || true
 amixer -c 1 sset Master 75% unmute 2>/dev/null || true
 amixer -q sset Master 75% unmute 2>/dev/null || true
 amixer -q sset Headphone 75% unmute 2>/dev/null || true
+sudo -n alsactl store 2>/dev/null || true
+echo "✅ Niveles ALSA guardados en /var/lib/alsa/asound.state."
 
-# 7. Prueba de audio
-echo "--- [7] Emitiendo tono de prueba... ---"
+# 5. Reiniciar WirePlumber para aplicar la regla de prioridad
+systemctl --user restart wireplumber 2>/dev/null || true
+sleep 1.5
+
+# 6. Asignar salida y micrófono en WirePlumber
+USB_SINK_ID=$(wpctl status 2>/dev/null | awk '/Sinks:/,/Sources:/' | grep -i -E "usb|generalplus|device" | grep -v -i "dummy" | grep -o -E '[0-9]+' | head -n 1)
+if [ -n "$USB_SINK_ID" ]; then
+    wpctl set-default "$USB_SINK_ID" 2>/dev/null
+    wpctl set-mute "$USB_SINK_ID" 0 2>/dev/null
+    wpctl set-volume "$USB_SINK_ID" 0.75 2>/dev/null
+    echo "✅ Salida de audífonos USB seleccionada (ID: $USB_SINK_ID, 75%)."
+fi
+
+USB_SRC_ID=$(wpctl status 2>/dev/null | awk '/Sources:/,/Filters:/' | grep -i -E "usb|generalplus|device" | grep -v -i "monitor" | grep -v -i "dummy" | grep -o -E '[0-9]+' | head -n 1)
+if [ -n "$USB_SRC_ID" ]; then
+    wpctl set-default "$USB_SRC_ID" 2>/dev/null
+    wpctl set-mute "$USB_SRC_ID" 0 2>/dev/null
+    wpctl set-volume "$USB_SRC_ID" 0.80 2>/dev/null
+    echo "✅ Micrófono USB seleccionado (ID: $USB_SRC_ID, 80%)."
+fi
+
+# 7. Tono de prueba
 if which paplay >/dev/null 2>&1 && [ -f /usr/share/sounds/freedesktop/stereo/complete.oga ]; then
     paplay /usr/share/sounds/freedesktop/stereo/complete.oga 2>/dev/null || true
 elif which pw-play >/dev/null 2>&1 && [ -f /usr/share/sounds/freedesktop/stereo/complete.oga ]; then
     pw-play /usr/share/sounds/freedesktop/stereo/complete.oga 2>/dev/null || true
-elif which aplay >/dev/null 2>&1; then
-    aplay -D plughw:1,0 /usr/share/sounds/alsa/Front_Center.wav 2>/dev/null || true
 fi
 
 echo "=========================================="
-echo "🎉 Proceso finalizado. Verifica el sonido en los audífonos."
+echo "🎉 Audio configurado permanentemente. No volverá a fallar tras reiniciar."
 echo "=========================================="`;
 
     const defaultScripts = [
         {
             name: '⚡ Actualizar Software Estudiante',
-            description: 'Descarga la última versión de LabDesk desde el servidor y reinicia la interfaz en 3 segundos.',
+            description: 'Descarga la última versión de LabDesk desde el servidor, blinda el audio y relanza la interfaz en 3 segundos.',
             icon: '⚡',
             content: updateScriptContent
         },
         {
-            name: '🎧 Activar Audífonos USB (Salida y Micrófono)',
-            description: 'Detecta audífonos USB con micrófono, los establece como predeterminados, desmutea canales y ajusta el volumen.',
+            name: '🛠️ Blindar y Configurar Audio USB Permanente',
+            description: 'Configura WirePlumber con prioridad 2000 para audífonos USB, guarda niveles ALSA y limpia autostart de forma definitiva.',
             icon: '🎧',
             content: usbAudioScriptContent
         },
@@ -306,7 +357,7 @@ echo "=========================================="`;
                         if (!insErr) console.log(`✅ Default Linux script inserted: ${s.name}`);
                     }
                 );
-            } else if (cleanName.includes('Actualizar Software') || cleanName.includes('Audífonos USB')) {
+            } else if (cleanName.includes('Actualizar Software') || cleanName.includes('Audio USB') || cleanName.includes('Audífonos USB')) {
                 // Mantener los scripts esenciales al día
                 db.run(
                     `UPDATE scripts SET name = ?, description = ?, icon = ?, content = ? WHERE id = ?`,

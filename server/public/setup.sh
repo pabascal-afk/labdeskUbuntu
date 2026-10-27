@@ -24,11 +24,29 @@ echo "[3/4] Instalando paquetes de Node.js y Electron..."
 cd /opt/labdesk/student-desktop
 npm install
 
-# 4. Configurar URL del servidor y auto-arranque en Openbox
-echo "[4/4] Configurando autoarranque en Openbox..."
+# 4. Configurar URL del servidor, regla WirePlumber de audio USB y auto-arranque en Openbox
+echo "[4/4] Configurando audio permanente y autoarranque en Openbox..."
 STUDENT_HOME="/home/estudiante"
 mkdir -p "$STUDENT_HOME/.config/openbox"
 mkdir -p "$STUDENT_HOME/.config/labdesk"
+mkdir -p "$STUDENT_HOME/.config/wireplumber/main.lua.d"
+mkdir -p /etc/wireplumber/main.lua.d
+
+# Regla WirePlumber de máxima prioridad para USB (2000)
+cat << 'EOF' > /etc/wireplumber/main.lua.d/99-usb-priority.lua
+table.insert(alsa_monitor.rules, {
+  matches = {
+    { { "node.name", "matches", "alsa_output.usb*" } },
+    { { "node.name", "matches", "alsa_input.usb*" } },
+    { { "device.bus", "equals", "usb" } },
+  },
+  apply_properties = {
+    ["priority.driver"] = 2000,
+    ["priority.session"] = 2000,
+  },
+})
+EOF
+cp /etc/wireplumber/main.lua.d/99-usb-priority.lua "$STUDENT_HOME/.config/wireplumber/main.lua.d/"
 
 cat <<EOF > "$STUDENT_HOME/.config/labdesk/config.json"
 {
@@ -43,36 +61,24 @@ xset s off
 xset -dpms
 xset s noblank
 
-# Iniciar audio
-pipewire & wireplumber &
+# Evitar archivos conflictivos de ALSA
+rm -f "\$HOME/.asoundrc" 2>/dev/null || true
 
-# Priorizar audífonos USB automáticamente si están conectados
-(
-  sleep 4
-  rm -f "$STUDENT_HOME/.asoundrc" 2>/dev/null || true
-  
-  if which wpctl >/dev/null 2>&1; then
-    USB_SINK_ID=$(wpctl status 2>/dev/null | awk '/Sinks:/,/Sources:/' | grep -i -E "usb|generalplus|device" | grep -v -i "dummy" | grep -o -E '[0-9]+' | head -n 1)
-    if [ -n "$USB_SINK_ID" ]; then
-      wpctl set-default "$USB_SINK_ID" 2>/dev/null
-      wpctl set-mute "$USB_SINK_ID" 0 2>/dev/null
-      wpctl set-volume "$USB_SINK_ID" 0.75 2>/dev/null
-    fi
-    USB_SRC_ID=$(wpctl status 2>/dev/null | awk '/Sources:/,/Filters:/' | grep -i -E "usb|generalplus|device" | grep -v -i "monitor" | grep -v -i "dummy" | grep -o -E '[0-9]+' | head -n 1)
-    if [ -n "$USB_SRC_ID" ]; then
-      wpctl set-default "$USB_SRC_ID" 2>/dev/null
-      wpctl set-mute "$USB_SRC_ID" 0 2>/dev/null
-      wpctl set-volume "$USB_SRC_ID" 0.80 2>/dev/null
-    fi
-  fi
-  amixer -c 1 sset Speaker 75% unmute 2>/dev/null || true
-  amixer -c 1 sset Mic 80% unmute 2>/dev/null || true
-  amixer -q sset Master 75% unmute 2>/dev/null || true
-  amixer -q sset Headphone 75% unmute 2>/dev/null || true
-) &
-
-# Iniciar LabDesk en bucle (auto-reinicio si se cierra)
+# Iniciar LabDesk Estudiante en bucle
 cd /opt/labdesk/student-desktop
+while true; do
+  npm start -- --no-sandbox
+  sleep 2
+done &
+EOF
+chmod +x "$STUDENT_HOME/.config/openbox/autostart"
+
+# Guardar calibración ALSA
+amixer -c 1 sset Speaker 75% unmute 2>/dev/null || true
+amixer -c 1 sset Mic 80% unmute 2>/dev/null || true
+amixer -q sset Master 75% unmute 2>/dev/null || true
+amixer -q sset Headphone 75% unmute 2>/dev/null || true
+alsactl store 2>/dev/null || true
 while true; do
   npm start -- --no-sandbox
   sleep 2
