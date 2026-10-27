@@ -134,55 +134,119 @@ fi`;
 
     const usbAudioScriptContent = `#!/bin/bash
 echo "=========================================="
-echo "🎧 Configurando Audífonos USB en Linux"
+echo "🎧 Diagnóstico y Reparación de Audio USB"
 echo "=========================================="
 
-# 1. Asegurar servicios PipeWire / PulseAudio activos
-systemctl --user restart pipewire pipewire-pulse wireplumber 2>/dev/null || pulseaudio -k 2>/dev/null || true
-sleep 1
+# 1. Configurar entorno de usuario para PipeWire / PulseAudio
+USER_UID=$(id -u)
+export XDG_RUNTIME_DIR="/run/user/$USER_UID"
+export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
 
-# 2. Localizar y configurar salida de audífonos USB
-USB_SINK=$(pactl list short sinks 2>/dev/null | grep -i "usb" | head -n 1 | awk '{print $2}')
-if [ -n "$USB_SINK" ]; then
-    echo "✅ Audífonos USB encontrados: $USB_SINK"
-    pactl set-default-sink "$USB_SINK"
-    pactl set-sink-mute "$USB_SINK" 0
-    pactl set-sink-volume "$USB_SINK" 75%
+# 2. Diagnóstico de Hardware USB y Kernel
+echo "--- [1] Dispositivos USB detectados (lsusb) ---"
+lsusb | grep -i -E "audio|sound|headset|c-media|realtek|logitech|genius" || lsusb | head -n 8
 
-    # Redirigir aplicaciones activas (Chrome, Chromium, Electron)
-    for id in $(pactl list short sink-inputs 2>/dev/null | cut -f1); do
-        pactl move-sink-input "$id" "$USB_SINK" 2>/dev/null || true
-    done
-    echo "✅ Salida de audio configurada al 75% en audífonos USB."
-else
-    echo "⚠️ No se detectaron audífonos USB conectados."
-    echo "Dispositivos de salida actuales:"
-    pactl list short sinks 2>/dev/null
-    pactl set-sink-mute @DEFAULT_SINK@ 0 2>/dev/null || true
-    pactl set-sink-volume @DEFAULT_SINK@ 75% 2>/dev/null || true
+echo "--- [2] Tarjetas reconocidas por el Kernel (/proc/asound/cards) ---"
+cat /proc/asound/cards 2>/dev/null || echo "No se pudo leer /proc/asound/cards"
+
+# 3. Comprobar si faltan utilidades e instalarlas si es posible
+if ! which pactl >/dev/null 2>&1 && which apt-get >/dev/null 2>&1; then
+    echo "Instalando herramientas de audio necesarias (pulseaudio-utils, alsa-utils)..."
+    sudo apt-get update -qq 2>/dev/null
+    sudo apt-get install -y pulseaudio-utils alsa-utils 2>/dev/null || true
 fi
 
-# 3. Localizar y configurar micrófono USB
-USB_SOURCE=$(pactl list short sources 2>/dev/null | grep -i "usb" | grep -v "monitor" | head -n 1 | awk '{print $2}')
-if [ -n "$USB_SOURCE" ]; then
-    echo "✅ Micrófono USB encontrado: $USB_SOURCE"
-    pactl set-default-source "$USB_SOURCE"
-    pactl set-source-mute "$USB_SOURCE" 0
-    pactl set-source-volume "$USB_SOURCE" 80%
-    echo "✅ Micrófono USB activado al 80%."
-else
-    echo "⚠️ No se detectó micrófono USB."
+# 4. Asegurar que el usuario está en el grupo de audio
+sudo usermod -aG audio $(whoami) 2>/dev/null || true
+
+SET_DONE=0
+
+# 5. Intentar configurar mediante WirePlumber (wpctl - nativo de PipeWire en Ubuntu)
+if which wpctl >/dev/null 2>&1; then
+    echo "--- [3] Configurando con WirePlumber (wpctl) ---"
+    USB_SINK_ID=$(wpctl status 2>/dev/null | awk '/Sinks:/,/Sources:/' | grep -i "usb" | grep -o -E '[0-9]+' | head -n 1)
+    if [ -n "$USB_SINK_ID" ]; then
+        echo "✅ Sink USB detectado en PipeWire con ID: $USB_SINK_ID"
+        wpctl set-default "$USB_SINK_ID" 2>/dev/null
+        wpctl set-mute "$USB_SINK_ID" 0 2>/dev/null
+        wpctl set-volume "$USB_SINK_ID" 0.75 2>/dev/null
+        SET_DONE=1
+    fi
+
+    USB_SRC_ID=$(wpctl status 2>/dev/null | awk '/Sources:/,/Filters:/' | grep -i "usb" | grep -v -i "monitor" | grep -o -E '[0-9]+' | head -n 1)
+    if [ -n "$USB_SRC_ID" ]; then
+        echo "✅ Micrófono USB detectado con ID: $USB_SRC_ID"
+        wpctl set-default "$USB_SRC_ID" 2>/dev/null
+        wpctl set-mute "$USB_SRC_ID" 0 2>/dev/null
+        wpctl set-volume "$USB_SRC_ID" 0.80 2>/dev/null
+    fi
 fi
 
-# 4. Desmutear canales ALSA a nivel hardware
-amixer -q sset Master unmute 2>/dev/null || true
-amixer -q sset Headphone unmute 2>/dev/null || true
-amixer -q sset Speaker unmute 2>/dev/null || true
-amixer -q sset PCM unmute 2>/dev/null || true
-amixer -q sset Mic unmute 2>/dev/null || true
+# 6. Intentar configurar mediante PulseAudio / PipeWire-Pulse (pactl)
+if which pactl >/dev/null 2>&1; then
+    echo "--- [4] Configurando con PulseAudio (pactl) ---"
+    USB_SINK=$(pactl list short sinks 2>/dev/null | grep -i "usb" | head -n 1 | awk '{print $2}')
+    if [ -n "$USB_SINK" ]; then
+        echo "✅ Salida USB pactl: $USB_SINK"
+        pactl set-default-sink "$USB_SINK" 2>/dev/null
+        pactl set-sink-mute "$USB_SINK" 0 2>/dev/null
+        pactl set-sink-volume "$USB_SINK" 75% 2>/dev/null
+        for stream in $(pactl list short sink-inputs 2>/dev/null | cut -f1); do
+            pactl move-sink-input "$stream" "$USB_SINK" 2>/dev/null || true
+        done
+        SET_DONE=1
+    fi
+
+    USB_SOURCE=$(pactl list short sources 2>/dev/null | grep -i "usb" | grep -v "monitor" | head -n 1 | awk '{print $2}')
+    if [ -n "$USB_SOURCE" ]; then
+        echo "✅ Micrófono USB pactl: $USB_SOURCE"
+        pactl set-default-source "$USB_SOURCE" 2>/dev/null
+        pactl set-source-mute "$USB_SOURCE" 0 2>/dev/null
+        pactl set-source-volume "$USB_SOURCE" 80% 2>/dev/null
+    fi
+fi
+
+# 7. Configurar ALSA a nivel Kernel mediante ~/.asoundrc (Garantía directa)
+USB_CARD_NUM=$(grep -E 'USB-Audio' /proc/asound/cards 2>/dev/null | head -n 1 | awk '{print $1}')
+if [ -n "$USB_CARD_NUM" ]; then
+    echo "--- [5] Configurando tarjeta ALSA $USB_CARD_NUM por defecto (~/.asoundrc) ---"
+    cat <<EOF > "$HOME/.asoundrc"
+pcm.!default {
+    type hw
+    card $USB_CARD_NUM
+}
+ctl.!default {
+    type hw
+    card $USB_CARD_NUM
+}
+EOF
+    amixer -c "$USB_CARD_NUM" sset Master 75% unmute 2>/dev/null || true
+    amixer -c "$USB_CARD_NUM" sset Speaker 75% unmute 2>/dev/null || true
+    amixer -c "$USB_CARD_NUM" sset Headphone 75% unmute 2>/dev/null || true
+    amixer -c "$USB_CARD_NUM" sset PCM 75% unmute 2>/dev/null || true
+    amixer -c "$USB_CARD_NUM" sset Mic 80% unmute 2>/dev/null || true
+    SET_DONE=1
+fi
+
+amixer -q sset Master 75% unmute 2>/dev/null || true
+amixer -q sset Headphone 75% unmute 2>/dev/null || true
+amixer -q sset Speaker 75% unmute 2>/dev/null || true
+
+# 8. Prueba de sonido (beep corto)
+echo "--- [6] Emitiendo tono de prueba de audio... ---"
+if which paplay >/dev/null 2>&1 && [ -f /usr/share/sounds/freedesktop/stereo/complete.oga ]; then
+    paplay /usr/share/sounds/freedesktop/stereo/complete.oga 2>/dev/null || true
+elif which speaker-test >/dev/null 2>&1; then
+    speaker-test -t sine -f 440 -l 1 -s 1 2>/dev/null || true
+fi
 
 echo "=========================================="
-echo "🎉 ¡Configuración de audio completada!"
+if [ "$SET_DONE" -eq 1 ]; then
+    echo "🎉 Audífonos USB configurados y activados exitosamente."
+else
+    echo "⚠️ ATENCIÓN: No se detectó ninguna tarjeta de audio USB en el kernel."
+    echo "Por favor prueba conectando los audífonos en otro puerto USB (de preferencia trasero)."
+fi
 echo "=========================================="`;
 
     const defaultScripts = [
