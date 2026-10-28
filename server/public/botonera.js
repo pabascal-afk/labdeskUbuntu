@@ -13,10 +13,21 @@ let roomState = {
     turnIns: 0
 };
 
+// Variables de Sesión y Tareas en Botonera
+let authToken = localStorage.getItem('labdesk_token') || null;
+let currentUser = null;
+let botoneraFolders = [];
+let botoneraAssignments = [];
+let botoneraSelectedFolderId = null;
+let botoneraCourses = [];
+let botoneraViewingAssignId = null;
+
 // ==============================================================
 // INICIALIZACIÓN
 // ==============================================================
 document.addEventListener('DOMContentLoaded', async () => {
+    checkBotoneraAuthStatus();
+    checkActiveAssignmentBotonera();
     setupSocket();
     await fetchSectors();
     await updateRoomSummary();
@@ -50,9 +61,24 @@ function setupSocket() {
         }
     });
 
-    socket.on('new_turn_in', () => {
+    socket.on('new_turn_in', (item) => {
         updateRoomSummary();
-        showToast('📥 ¡Nueva tarea entregada por un alumno!');
+        showToast(`📥 ¡Nueva entrega: ${item?.student_name || 'Alumno'}!`);
+    });
+
+    socket.on('new_submission', (sub) => {
+        updateRoomSummary();
+        showToast(`📥 ¡Nueva entrega: ${sub.main_student_name || 'Alumno'}!`);
+        if (isModalOpen('modal-botonera-submissions')) {
+            refreshBotoneraSubmissions();
+        }
+    });
+
+    socket.on('active_assignment_updated', (data) => {
+        updateActiveAssignmentBotoneraHUD(data);
+        if (isModalOpen('modal-botonera-assignments')) {
+            fetchBotoneraAssignments();
+        }
     });
 }
 
@@ -519,3 +545,563 @@ function escapeHtml(str) {
     if (!str) return '';
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+// ==============================================================
+// AUTENTICACIÓN Y SESIONES EN LA BOTONERA
+// ==============================================================
+async function authFetch(url, options = {}) {
+    options.headers = options.headers || {};
+    if (authToken) {
+        options.headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    const res = await fetch(url, options);
+    if (res.status === 401 && !url.includes('/api/auth/')) {
+        openModal('modal-botonera-login');
+    }
+    return res;
+}
+
+async function checkBotoneraAuthStatus() {
+    if (!authToken) {
+        updateBotoneraAuthUI(null);
+        return;
+    }
+    try {
+        const res = await fetch('/api/auth/me', {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            currentUser = data.user;
+            updateBotoneraAuthUI(currentUser);
+        } else {
+            localStorage.removeItem('labdesk_token');
+            authToken = null;
+            currentUser = null;
+            updateBotoneraAuthUI(null);
+        }
+    } catch(e) {
+        updateBotoneraAuthUI(null);
+    }
+}
+
+function updateBotoneraAuthUI(user) {
+    const hudUserLabel = document.getElementById('hud-user-label');
+    const formArea = document.getElementById('botonera-login-form-area');
+    const profileArea = document.getElementById('botonera-profile-area');
+    const bottomBar = document.getElementById('botonera-login-bottom');
+
+    if (user) {
+        if (hudUserLabel) hudUserLabel.textContent = user.fullName || user.username;
+        if (formArea) formArea.style.display = 'none';
+        if (profileArea) {
+            profileArea.style.display = 'block';
+            document.getElementById('botonera-profile-name').textContent = user.fullName || user.username;
+            document.getElementById('botonera-profile-role').textContent = user.role === 'admin' ? 'Administrador' : 'Profesor';
+            document.getElementById('botonera-profile-user').textContent = `@${user.username}`;
+        }
+        if (bottomBar) bottomBar.style.display = 'none';
+    } else {
+        if (hudUserLabel) hudUserLabel.textContent = 'Ingresar';
+        if (formArea) formArea.style.display = 'block';
+        if (profileArea) profileArea.style.display = 'none';
+        if (bottomBar) bottomBar.style.display = 'flex';
+    }
+}
+
+function openBotoneraLoginModal() {
+    openModal('modal-botonera-login');
+}
+
+async function submitBotoneraLogin() {
+    const username = document.getElementById('botonera-login-user').value.trim();
+    const password = document.getElementById('botonera-login-pass').value.trim();
+    const errEl = document.getElementById('botonera-login-err');
+    errEl.style.display = 'none';
+
+    if (!username || !password) {
+        errEl.textContent = 'Ingresa usuario y contraseña';
+        errEl.style.display = 'block';
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (data.success && data.token) {
+            authToken = data.token;
+            currentUser = data.user;
+            localStorage.setItem('labdesk_token', authToken);
+            updateBotoneraAuthUI(currentUser);
+            closeModal('modal-botonera-login');
+            showToast(`¡Bienvenido(a), ${currentUser.fullName}!`);
+            document.getElementById('botonera-login-pass').value = '';
+        } else {
+            errEl.textContent = data.error || 'Credenciales incorrectas';
+            errEl.style.display = 'block';
+        }
+    } catch(err) {
+        errEl.textContent = 'Error de conexión con el servidor';
+        errEl.style.display = 'block';
+    }
+}
+
+async function logoutBotoneraUser() {
+    if (authToken) {
+        await fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        }).catch(() => {});
+    }
+    localStorage.removeItem('labdesk_token');
+    authToken = null;
+    currentUser = null;
+    updateBotoneraAuthUI(null);
+    closeModal('modal-botonera-login');
+    showToast('Sesión cerrada');
+}
+
+// ==============================================================
+// SINCRONIZACIÓN DE TAREA ACTIVA EN EL HUD DE LA BOTONERA
+// ==============================================================
+async function checkActiveAssignmentBotonera() {
+    try {
+        const res = await fetch('/api/assignments/active');
+        const data = await res.json();
+        if (data && data.active && data.assignment) {
+            updateActiveAssignmentBotoneraHUD(data.assignment);
+        } else {
+            updateActiveAssignmentBotoneraHUD(null);
+        }
+    } catch(e) {}
+}
+
+function updateActiveAssignmentBotoneraHUD(data) {
+    const subLabel = document.getElementById('btn-sub-active-assignment');
+    const deckBtn = document.getElementById('btn-deck-tasks');
+    if (!subLabel || !deckBtn) return;
+
+    if (data && data.title) {
+        subLabel.textContent = `🟢 ${data.title}`;
+        deckBtn.style.borderColor = 'var(--led-green)';
+    } else {
+        subLabel.textContent = 'Asignar a Sala';
+        deckBtn.style.borderColor = '#3b82f6';
+    }
+}
+
+// ==============================================================
+// GESTIÓN Y ASIGNACIÓN DE TAREAS EN LA BOTONERA
+// ==============================================================
+async function openBotoneraAssignmentsModal() {
+    if (!currentUser) {
+        openBotoneraLoginModal();
+        return;
+    }
+    openModal('modal-botonera-assignments');
+    await fetchBotoneraFolders();
+    await fetchBotoneraCourses();
+    populateBotoneraCourseDropdown();
+    await fetchBotoneraAssignments();
+}
+
+async function fetchBotoneraFolders() {
+    try {
+        const res = await authFetch('/api/folders');
+        botoneraFolders = await res.json();
+        renderBotoneraFoldersList(botoneraFolders);
+        populateBotoneraFolderDropdown();
+    } catch(err) {
+        console.error('Error cargando carpetas en botonera:', err);
+    }
+}
+
+function renderBotoneraFoldersList(folders) {
+    const listEl = document.getElementById('botonera-folders-list');
+    if (!listEl) return;
+
+    let html = `
+        <div class="botonera-folder-item ${botoneraSelectedFolderId === null ? 'active' : ''}" onclick="selectBotoneraFolder(null)">
+            <span>📁 Todas las Tareas</span>
+        </div>
+    `;
+
+    (folders || []).forEach(f => {
+        html += `
+            <div class="botonera-folder-item ${botoneraSelectedFolderId === f.id ? 'active' : ''}" onclick="selectBotoneraFolder(${f.id})">
+                <div style="display:flex; align-items:center;">
+                    <span class="botonera-folder-badge-color" style="background:${f.color || '#3b82f6'};"></span>
+                    <span>${escapeHtml(f.name)}</span>
+                </div>
+                <button type="button" class="btn-botonera-del" onclick="event.stopPropagation(); deleteBotoneraFolder(${f.id})" title="Eliminar Carpeta">&times;</button>
+            </div>
+        `;
+    });
+
+    listEl.innerHTML = html;
+}
+
+function selectBotoneraFolder(folderId) {
+    botoneraSelectedFolderId = folderId;
+    renderBotoneraFoldersList(botoneraFolders);
+    const heading = document.getElementById('botonera-folder-heading');
+    if (folderId === null) {
+        heading.textContent = 'Todas las Tareas';
+    } else {
+        const f = botoneraFolders.find(x => x.id === folderId);
+        heading.textContent = f ? `📁 ${f.name}` : 'Tareas';
+    }
+    renderBotoneraAssignmentsCards();
+}
+
+async function promptBotoneraNewFolder() {
+    const name = prompt('Nombre de la nueva carpeta (ej: 8° Básico Ciencias):');
+    if (!name || !name.trim()) return;
+
+    try {
+        const res = await authFetch('/api/folders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name.trim() })
+        });
+        if (res.ok) {
+            showToast('Carpeta creada');
+            fetchBotoneraFolders();
+        }
+    } catch(err) {
+        console.error('Error creando carpeta:', err);
+    }
+}
+
+async function deleteBotoneraFolder(folderId) {
+    if (!confirm('¿Eliminar esta carpeta?')) return;
+    try {
+        const res = await authFetch(`/api/folders/${folderId}`, { method: 'DELETE' });
+        if (res.ok) {
+            if (botoneraSelectedFolderId === folderId) botoneraSelectedFolderId = null;
+            fetchBotoneraFolders();
+            fetchBotoneraAssignments();
+        }
+    } catch(err) {
+        console.error('Error eliminando carpeta:', err);
+    }
+}
+
+async function fetchBotoneraCourses() {
+    try {
+        const res = await authFetch('/api/courses');
+        botoneraCourses = await res.json();
+    } catch(e) {}
+}
+
+function populateBotoneraCourseDropdown() {
+    const sel = document.getElementById('b-assign-course');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Selecciona curso...</option>';
+    (botoneraCourses || []).forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = `${c.name} (${c.student_count || 0} alumnos)`;
+        sel.appendChild(opt);
+    });
+}
+
+function populateBotoneraFolderDropdown() {
+    const sel = document.getElementById('b-assign-folder');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">(Sin Carpeta)</option>';
+    (botoneraFolders || []).forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f.id;
+        opt.textContent = f.name;
+        sel.appendChild(opt);
+    });
+}
+
+function toggleBotoneraAssignmentForm(show) {
+    const form = document.getElementById('botonera-assign-form');
+    const isVisible = form.style.display !== 'none';
+    const willShow = show !== undefined ? show : !isVisible;
+
+    form.style.display = willShow ? 'block' : 'none';
+    if (willShow) {
+        document.getElementById('botonera-assign-id').value = '';
+        document.getElementById('b-assign-title').value = '';
+        document.getElementById('b-assign-instructions').value = '';
+        document.getElementById('b-assign-group-check').checked = false;
+        document.getElementById('b-assign-group-wrap').style.display = 'none';
+        if (botoneraSelectedFolderId) {
+            document.getElementById('b-assign-folder').value = botoneraSelectedFolderId;
+        }
+        document.getElementById('b-assign-title').focus();
+    }
+}
+
+async function fetchBotoneraAssignments() {
+    try {
+        const res = await authFetch('/api/assignments');
+        botoneraAssignments = await res.json();
+        renderBotoneraAssignmentsCards();
+    } catch(err) {
+        console.error('Error cargando tareas en botonera:', err);
+    }
+}
+
+function renderBotoneraAssignmentsCards() {
+    const container = document.getElementById('botonera-assignments-cards');
+    if (!container) return;
+
+    let filtered = botoneraAssignments;
+    if (botoneraSelectedFolderId !== null) {
+        filtered = botoneraAssignments.filter(a => a.folder_id === botoneraSelectedFolderId);
+    }
+
+    if (!filtered || filtered.length === 0) {
+        container.innerHTML = '<p class="text-center text-muted" style="padding:30px;">No hay tareas creadas aquí. Pulsa <strong>+ Nueva Tarea</strong> para comenzar.</p>';
+        return;
+    }
+
+    container.innerHTML = filtered.map(a => {
+        const isActive = a.status === 'active';
+        const appLabel = a.app_type === 'writer' ? 'Mini Writer' : (a.app_type === 'calc' ? 'Mini Calc' : (a.app_type === 'slides' ? 'Mini Slides' : 'Cualquier Editor'));
+        const modeLabel = a.is_group ? `👥 Grupal (Hasta ${a.max_group_size})` : '👤 Individual';
+
+        return `
+            <div class="botonera-assignment-card ${isActive ? 'active-room' : ''}">
+                <div class="botonera-assignment-card-top">
+                    <div>
+                        <h4 style="margin:0; font-size:15px; font-weight:700; display:flex; align-items:center; gap:8px;">
+                            ${isActive ? '<span class="badge-active-pulse">● ASIGNADA EN SALA</span>' : ''}
+                            <span>${escapeHtml(a.title)}</span>
+                        </h4>
+                        <div class="botonera-assignment-meta-row">
+                            <span>🏫 <strong>${escapeHtml(a.course_name)}</strong></span>
+                            <span>💻 ${appLabel}</span>
+                            <span>${modeLabel}</span>
+                            ${a.folder_name ? `<span>📁 ${escapeHtml(a.folder_name)}</span>` : ''}
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn-botonera-del" onclick="deleteBotoneraAssignment(${a.id})" title="Eliminar Tarea">🗑️</button>
+                    </div>
+                </div>
+
+                ${a.instructions ? `<div class="botonera-assignment-instructions">${escapeHtml(a.instructions)}</div>` : ''}
+
+                <div class="botonera-assignment-actions">
+                    <div>
+                        ${isActive ? `
+                            <button class="btn-action" style="background:#eab308; color:#0f172a; font-size:12px; font-weight:700; padding:6px 14px;" onclick="deactivateBotoneraAssignment(${a.id})">
+                                ⏹️ Finalizar Asignación
+                            </button>
+                        ` : `
+                            <button class="btn-action btn-send" style="font-size:12px; font-weight:700; padding:6px 14px;" onclick="activateBotoneraAssignment(${a.id})">
+                                🚀 Asignar a la Sala
+                            </button>
+                        `}
+                    </div>
+                    <div>
+                        <button class="btn-action" style="font-size:12px; padding:6px 12px;" onclick="viewBotoneraSubmissions(${a.id}, '${escapeHtml(a.title)}', '${escapeHtml(a.course_name)}', '${escapeHtml(a.teacher_name)}')">
+                            📥 Entregas (${a.submission_count || 0})
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function saveBotoneraAssignment() {
+    const id = document.getElementById('botonera-assign-id').value;
+    const title = document.getElementById('b-assign-title').value.trim();
+    const course_id = document.getElementById('b-assign-course').value;
+    const folder_id = document.getElementById('b-assign-folder').value || null;
+    const app_type = document.getElementById('b-assign-app').value;
+    const is_group = document.getElementById('b-assign-group-check').checked;
+    const max_group_size = Number(document.getElementById('b-assign-max-group').value) || 4;
+    const instructions = document.getElementById('b-assign-instructions').value.trim();
+
+    if (!title || !course_id) {
+        alert('Ingresa un título y selecciona el curso asignado.');
+        return;
+    }
+
+    const payload = { folder_id, course_id, title, instructions, app_type, is_group, max_group_size };
+
+    try {
+        const url = id ? `/api/assignments/${id}` : '/api/assignments';
+        const method = id ? 'PUT' : 'POST';
+        const res = await authFetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            showToast(id ? 'Tarea actualizada' : 'Tarea creada');
+            toggleBotoneraAssignmentForm(false);
+            fetchBotoneraAssignments();
+        } else {
+            const err = await res.json();
+            alert('Error al guardar: ' + (err.error || 'No se pudo guardar la tarea'));
+        }
+    } catch(err) {
+        console.error('Error guardando tarea en botonera:', err);
+    }
+}
+
+async function deleteBotoneraAssignment(id) {
+    if (!confirm('¿Eliminar esta tarea y sus entregas?')) return;
+    try {
+        const res = await authFetch(`/api/assignments/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+            showToast('Tarea eliminada');
+            fetchBotoneraAssignments();
+        }
+    } catch(err) {
+        console.error('Error eliminando tarea:', err);
+    }
+}
+
+async function activateBotoneraAssignment(id) {
+    try {
+        const res = await authFetch(`/api/assignments/${id}/activate`, { method: 'POST' });
+        if (res.ok) {
+            showToast('🚀 Tarea asignada en la sala.');
+            fetchBotoneraAssignments();
+        }
+    } catch(err) {
+        console.error('Error activando tarea:', err);
+    }
+}
+
+async function deactivateBotoneraAssignment(id) {
+    try {
+        const res = await authFetch(`/api/assignments/${id}/deactivate`, { method: 'POST' });
+        if (res.ok) {
+            showToast('⏹️ Asignación cerrada en la sala.');
+            fetchBotoneraAssignments();
+        }
+    } catch(err) {
+        console.error('Error cerrando asignación:', err);
+    }
+}
+
+// ==============================================================
+// BANDEJA DE ENTREGAS Y DESCARGA ZIP EN LA BOTONERA
+// ==============================================================
+async function viewBotoneraSubmissions(assignId, title, course, teacher) {
+    botoneraViewingAssignId = assignId;
+    document.getElementById('b-sub-task-name').textContent = title;
+    document.getElementById('b-sub-task-meta').textContent = `${course} • Profesor: ${teacher}`;
+    openModal('modal-botonera-submissions');
+    await refreshBotoneraSubmissions();
+}
+
+async function refreshBotoneraSubmissions() {
+    if (!botoneraViewingAssignId) return;
+    try {
+        const res = await fetch(`/api/assignments/${botoneraViewingAssignId}/submissions`);
+        const submissions = await res.json();
+        renderBotoneraSubmissionsTable(submissions);
+    } catch(err) {
+        console.error('Error obteniendo entregas en botonera:', err);
+    }
+}
+
+function renderBotoneraSubmissionsTable(submissions) {
+    const tbody = document.getElementById('b-submissions-tbody');
+    if (!tbody) return;
+
+    if (!submissions || submissions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center">No hay entregas para esta tarea todavía.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = submissions.map(s => {
+        let studentText = s.main_student_name || 'Estudiante';
+        if (s.student_names && Array.isArray(s.student_names) && s.student_names.length > 1) {
+            studentText = `<strong>👥 ${escapeHtml(s.student_names.join(', '))}</strong>`;
+        } else {
+            studentText = `<strong>👤 ${escapeHtml(studentText)}</strong>`;
+        }
+
+        const dateStr = s.created_at ? new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--';
+
+        return `
+            <tr>
+                <td><small>${dateStr}</small></td>
+                <td>${studentText}</td>
+                <td><small>${escapeHtml(s.client_name || s.client_id)}</small></td>
+                <td><span class="badge" style="background:#1e293b; color:#38bdf8; padding:2px 6px; border-radius:4px; font-size:11px;">${escapeHtml(s.app_type || 'Doc')}</span></td>
+                <td><small>${escapeHtml(s.filename)}</small></td>
+                <td><small style="color:var(--text-dim);">${escapeHtml(s.notes || '-')}</small></td>
+                <td>
+                    <button class="btn-action" style="padding:2px 8px; font-size:11px;" onclick="previewBotoneraSubmission('${s.file_path}', '${escapeHtml(s.filename)}')">👁️</button>
+                    <a href="${s.file_path}" class="btn-action" download="${escapeHtml(s.filename)}" style="padding:2px 8px; font-size:11px; text-decoration:none;">⬇️</a>
+                    <button class="btn-botonera-del" onclick="deleteBotoneraSubmissionRecord(${s.id})">🗑️</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function downloadBotoneraSubmissionsZip() {
+    if (!botoneraViewingAssignId) return;
+    window.location.href = `/api/assignments/${botoneraViewingAssignId}/download-all`;
+}
+
+function previewBotoneraSubmission(fileUrl, filename) {
+    const frame = document.getElementById('b-preview-frame');
+    const pre = document.getElementById('b-preview-text');
+    const titleEl = document.getElementById('b-preview-title');
+    const downloadBtn = document.getElementById('b-preview-download-btn');
+
+    titleEl.textContent = `👁️ ${filename}`;
+    downloadBtn.href = fileUrl;
+    downloadBtn.download = filename;
+
+    if (filename.endsWith('.html') || filename.endsWith('.htm')) {
+        frame.style.display = 'block';
+        pre.style.display = 'none';
+        frame.src = fileUrl;
+    } else {
+        frame.style.display = 'none';
+        pre.style.display = 'block';
+        pre.textContent = 'Cargando contenido...';
+        fetch(fileUrl)
+            .then(res => res.text())
+            .then(txt => {
+                try {
+                    const parsed = JSON.parse(txt);
+                    pre.textContent = JSON.stringify(parsed, null, 2);
+                } catch(e) {
+                    pre.textContent = txt;
+                }
+            })
+            .catch(() => {
+                pre.textContent = 'No se pudo previsualizar el archivo.';
+            });
+    }
+
+    openModal('modal-botonera-preview');
+}
+
+async function deleteBotoneraSubmissionRecord(id) {
+    if (!confirm('¿Eliminar esta entrega permanentemente?')) return;
+    try {
+        const res = await authFetch(`/api/submissions/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+            showToast('Entrega eliminada');
+            refreshBotoneraSubmissions();
+            fetchBotoneraAssignments();
+        }
+    } catch(err) {
+        console.error('Error eliminando entrega en botonera:', err);
+    }
+}
+

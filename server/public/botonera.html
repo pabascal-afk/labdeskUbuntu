@@ -60,6 +60,9 @@
             </div>
 
             <div class="header-tools">
+                <button class="btn-tool" onclick="openBotoneraLoginModal()" id="btn-botonera-auth" title="Iniciar Sesión Docente">
+                    👤 <span id="hud-user-label">Ingresar</span>
+                </button>
                 <button class="btn-tool" onclick="lockConsole()" title="Proteger Botonera con PIN">
                     🛡️ <span>Pausar</span>
                 </button>
@@ -192,11 +195,11 @@
                         <div class="btn-sub">Mensaje emergente</div>
                     </button>
 
-                    <a href="/#tareas" class="deck-btn btn-turnin" style="border-color:#3b82f6; text-decoration:none;">
+                    <button class="deck-btn btn-turnin" id="btn-deck-tasks" onclick="openBotoneraAssignmentsModal()" style="border-color:#3b82f6;">
                         <div class="btn-icon">📋</div>
                         <div class="btn-label">MIS TAREAS</div>
-                        <div class="btn-sub">Asignar en Sala</div>
-                    </a>
+                        <div class="btn-sub" id="btn-sub-active-assignment">Asignar a Sala</div>
+                    </button>
 
                     <button class="deck-btn btn-turnin" onclick="openTurnInsModal()">
                         <div class="btn-icon">📥</div>
@@ -402,6 +405,209 @@
                     <button class="pad-btn" onclick="pressConsolePin('0')">0</button>
                     <button class="pad-btn pad-ok" onclick="unlockConsole()">OK</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- MODAL: LOGIN / PERFIL DOCENTE (BOTONERA)                       -->
+    <!-- ============================================================== -->
+    <div id="modal-botonera-login" class="modal-overlay">
+        <div class="modal-box" style="max-width: 400px;">
+            <div class="modal-top">
+                <h3 id="botonera-login-title">🔐 Iniciar Sesión Docente</h3>
+                <button class="btn-modal-close" onclick="closeModal('modal-botonera-login')">&times;</button>
+            </div>
+            <div class="modal-form">
+                <div id="botonera-login-form-area">
+                    <p style="font-size:12px; color:var(--text-dim); margin-bottom:12px;">Ingresa tus credenciales de profesor o administrador para crear y asignar tareas.</p>
+                    <div class="field-group">
+                        <label for="botonera-login-user">Usuario:</label>
+                        <input type="text" id="botonera-login-user" class="input-console" placeholder="profesor o admin">
+                    </div>
+                    <div class="field-group" style="margin-top:10px;">
+                        <label for="botonera-login-pass">Contraseña:</label>
+                        <input type="password" id="botonera-login-pass" class="input-console" placeholder="••••••••">
+                    </div>
+                    <div id="botonera-login-err" style="display:none; color:var(--led-red); font-size:12px; margin-top:8px; text-align:center;"></div>
+                </div>
+
+                <div id="botonera-profile-area" style="display:none; text-align:center; padding:10px 0;">
+                    <div style="font-size:2.5rem; margin-bottom:6px;">👨‍🏫</div>
+                    <h3 id="botonera-profile-name" style="margin:0; font-size:16px;">Profesor</h3>
+                    <span id="botonera-profile-role" class="badge" style="display:inline-block; margin-top:4px; background:#1e293b; color:#38bdf8; padding:2px 8px; border-radius:12px; font-size:11px;">Profesor</span>
+                    <p id="botonera-profile-user" style="color:var(--text-dim); font-size:12px; margin-top:4px;">@usuario</p>
+                    <button class="btn-action" onclick="logoutBotoneraUser()" style="margin-top:16px; width:100%; background:var(--led-red); color:white;">🚪 Cerrar Sesión</button>
+                </div>
+            </div>
+            <div class="modal-bottom" id="botonera-login-bottom">
+                <button class="btn-cancel" onclick="closeModal('modal-botonera-login')">Cancelar</button>
+                <button class="btn-action btn-send" onclick="submitBotoneraLogin()">Ingresar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- MODAL: GESTIÓN DE TAREAS Y ASIGNACIONES EN SALA (BOTONERA)      -->
+    <!-- ============================================================== -->
+    <div id="modal-botonera-assignments" class="modal-overlay">
+        <div class="modal-box modal-wide" style="max-width: 980px;">
+            <div class="modal-top">
+                <h3>📋 Mis Tareas & Asignaciones de Aula</h3>
+                <button class="btn-modal-close" onclick="closeModal('modal-botonera-assignments')">&times;</button>
+            </div>
+            <div class="botonera-assignments-layout">
+                <!-- Barra Lateral de Carpetas -->
+                <div class="botonera-folders-sidebar">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <strong style="font-size:11px; color:var(--text-dim); letter-spacing:0.5px;">CARPETAS</strong>
+                        <button class="btn-preset-toggle" onclick="promptBotoneraNewFolder()">+ Carpeta</button>
+                    </div>
+                    <div class="botonera-folders-list" id="botonera-folders-list">
+                        <div class="botonera-folder-item active" onclick="selectBotoneraFolder(null)">
+                            <span>📁 Todas las Tareas</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panel Principal de Tareas -->
+                <div class="botonera-assignments-main-pane">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <h4 id="botonera-folder-heading" style="margin:0; font-size:14px; font-weight:700;">Todas las Tareas</h4>
+                        <button class="btn-action" style="padding:6px 12px; font-size:12px;" onclick="toggleBotoneraAssignmentForm()">+ Nueva Tarea</button>
+                    </div>
+
+                    <!-- Formulario Desplegable para Crear Tarea -->
+                    <div id="botonera-assign-form" style="display:none; background:#0b1120; border:1px solid #27364d; border-radius:8px; padding:12px; margin-bottom:10px;">
+                        <h5 style="margin:0 0 10px 0; font-size:13px; color:var(--led-blue);">✨ Nueva Asignación para la Sala</h5>
+                        <input type="hidden" id="botonera-assign-id" value="">
+
+                        <div style="display:grid; grid-template-columns: 2fr 1fr; gap:8px;">
+                            <div class="field-group">
+                                <label style="font-size:11px;">Título de la Tarea: *</label>
+                                <input type="text" id="b-assign-title" class="input-console" style="padding:6px 10px; font-size:12px;" placeholder="Ej: Trabajo de Investigación">
+                            </div>
+                            <div class="field-group">
+                                <label style="font-size:11px;">Curso Asignado: *</label>
+                                <select id="b-assign-course" class="sector-dropdown" style="padding:6px 10px; font-size:12px; width:100%;">
+                                    <option value="">Selecciona curso...</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; margin-top:8px;">
+                            <div class="field-group">
+                                <label style="font-size:11px;">Carpeta:</label>
+                                <select id="b-assign-folder" class="sector-dropdown" style="padding:6px 10px; font-size:12px; width:100%;">
+                                    <option value="">(Sin Carpeta)</option>
+                                </select>
+                            </div>
+                            <div class="field-group">
+                                <label style="font-size:11px;">Editor Requerido:</label>
+                                <select id="b-assign-app" class="sector-dropdown" style="padding:6px 10px; font-size:12px; width:100%;">
+                                    <option value="any">Cualquiera (Writer, Calc, Slides)</option>
+                                    <option value="writer">📄 Mini Writer</option>
+                                    <option value="calc">📊 Mini Calc</option>
+                                    <option value="slides">📽️ Mini Slides</option>
+                                </select>
+                            </div>
+                            <div class="field-group">
+                                <label style="display:flex; align-items:center; gap:6px; margin-top:22px; cursor:pointer; font-size:11px;">
+                                    <input type="checkbox" id="b-assign-group-check" onchange="document.getElementById('b-assign-group-wrap').style.display = this.checked ? 'block' : 'none'">
+                                    <span>¿Trabajo Grupal?</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div id="b-assign-group-wrap" class="field-group" style="display:none; margin-top:6px;">
+                            <label style="font-size:11px;">Máx. Integrantes por Grupo:</label>
+                            <input type="number" id="b-assign-max-group" class="input-console" min="2" max="10" value="4" style="width:100px; padding:4px 8px; font-size:12px;">
+                        </div>
+
+                        <div class="field-group" style="margin-top:8px;">
+                            <label style="font-size:11px;">Instrucciones para los Estudiantes:</label>
+                            <textarea id="b-assign-instructions" class="input-console" rows="2" style="font-size:12px; resize:vertical;" placeholder="Escribe lo que deben realizar los alumnos..."></textarea>
+                        </div>
+
+                        <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:10px;">
+                            <button class="btn-cancel" style="padding:4px 10px; font-size:11px;" onclick="toggleBotoneraAssignmentForm(false)">Cancelar</button>
+                            <button class="btn-action btn-send" style="padding:4px 12px; font-size:11px;" onclick="saveBotoneraAssignment()">💾 Guardar Tarea</button>
+                        </div>
+                    </div>
+
+                    <!-- Lista de Tarjetas de Tarea -->
+                    <div id="botonera-assignments-cards" style="display:flex; flex-direction:column; gap:10px;">
+                        <p class="text-center text-muted" style="padding:30px;">Cargando tareas...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-bottom">
+                <button class="btn-cancel" onclick="closeModal('modal-botonera-assignments')">Cerrar</button>
+                <button class="btn-action" onclick="fetchBotoneraAssignments()">🔄 Refrescar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- MODAL: BANDEJA DE ENTREGAS DE TAREA (BOTONERA)                 -->
+    <!-- ============================================================== -->
+    <div id="modal-botonera-submissions" class="modal-overlay">
+        <div class="modal-box modal-wide">
+            <div class="modal-top">
+                <h3 id="b-sub-modal-title">📥 Entregas Recibidas</h3>
+                <button class="btn-modal-close" onclick="closeModal('modal-botonera-submissions')">&times;</button>
+            </div>
+            <div class="modal-scrollable">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <div>
+                        <strong id="b-sub-task-name" style="font-size:15px; color:var(--led-blue);">Tarea</strong>
+                        <p id="b-sub-task-meta" style="margin:2px 0 0 0; font-size:12px; color:var(--text-dim);">Curso • Profesor</p>
+                    </div>
+                    <button class="btn-action btn-send" onclick="downloadBotoneraSubmissionsZip()">
+                        📦 Descargar Todas en ZIP
+                    </button>
+                </div>
+
+                <table class="turnin-table">
+                    <thead>
+                        <tr>
+                            <th>Hora</th>
+                            <th>Estudiante(s)</th>
+                            <th>Estación</th>
+                            <th>Programa</th>
+                            <th>Archivo</th>
+                            <th>Notas</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="b-submissions-tbody">
+                        <tr><td colspan="7" class="text-center">No hay entregas para esta tarea todavía.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-bottom">
+                <button class="btn-cancel" onclick="closeModal('modal-botonera-submissions')">Cerrar</button>
+                <button class="btn-action" onclick="refreshBotoneraSubmissions()">🔄 Actualizar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- MODAL: PREVISUALIZADOR DE DOCUMENTOS ENTREGADOS                -->
+    <!-- ============================================================== -->
+    <div id="modal-botonera-preview" class="modal-overlay">
+        <div class="modal-box modal-wide">
+            <div class="modal-top">
+                <h3 id="b-preview-title">👁️ Vista Previa del Trabajo</h3>
+                <button class="btn-modal-close" onclick="closeModal('modal-botonera-preview')">&times;</button>
+            </div>
+            <div class="modal-scrollable" style="padding:0; max-height:70vh;">
+                <iframe id="b-preview-frame" style="width:100%; height:480px; background:white; border:none;"></iframe>
+                <pre id="b-preview-text" style="display:none; padding:16px; margin:0; background:#0b1120; color:#4ade80; font-family:monospace; max-height:480px; overflow-y:auto; white-space:pre-wrap;"></pre>
+            </div>
+            <div class="modal-bottom">
+                <button class="btn-cancel" onclick="closeModal('modal-botonera-preview')">Cerrar</button>
+                <a id="b-preview-download-btn" href="#" class="btn-action btn-send" download style="text-decoration:none;">⬇️ Descargar Archivo</a>
             </div>
         </div>
     </div>

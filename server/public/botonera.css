@@ -768,3 +768,153 @@ body {
     animation: fadeIn 0.2s ease;
 }
 .toast-banner.show { display: block; }
+
+/* ============================================================== */
+/* ESTILOS DE TAREAS Y ASIGNACIONES EN LA BOTONERA                */
+/* ============================================================== */
+.botonera-assignments-layout {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 16px;
+    min-height: 480px;
+    padding: 16px;
+}
+
+.botonera-folders-sidebar {
+    background: #090d16;
+    border: 1px solid #1f293d;
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.botonera-folders-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 380px;
+}
+
+.botonera-folder-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-dim);
+    transition: all 0.15s;
+    border: 1px solid transparent;
+}
+.botonera-folder-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-main);
+}
+.botonera-folder-item.active {
+    background: rgba(56, 189, 248, 0.15);
+    border-color: rgba(56, 189, 248, 0.4);
+    color: var(--led-blue);
+    font-weight: 600;
+}
+
+.botonera-folder-badge-color {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 8px;
+    display: inline-block;
+}
+
+.btn-botonera-del {
+    background: transparent;
+    border: none;
+    color: var(--led-red);
+    cursor: pointer;
+    font-size: 13px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    opacity: 0.7;
+}
+.btn-botonera-del:hover { opacity: 1; background: rgba(239, 68, 68, 0.2); }
+
+.botonera-assignments-main-pane {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+    max-height: 520px;
+    padding-right: 4px;
+}
+
+.botonera-assignment-card {
+    background: #151d2d;
+    border: 1px solid #27364d;
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: relative;
+    transition: all 0.2s;
+}
+.botonera-assignment-card.active-room {
+    border-color: var(--led-blue);
+    background: linear-gradient(135deg, rgba(30, 58, 138, 0.3), rgba(15, 23, 42, 0.9));
+    box-shadow: 0 0 15px rgba(56, 189, 248, 0.25);
+}
+
+.botonera-assignment-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.botonera-assignment-meta-row {
+    display: flex;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--text-dim);
+    flex-wrap: wrap;
+    margin-top: 4px;
+}
+
+.botonera-assignment-instructions {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 12px;
+    color: #cbd5e1;
+    line-height: 1.4;
+    white-space: pre-wrap;
+}
+
+.botonera-assignment-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.badge-active-pulse {
+    background: var(--led-green);
+    color: white;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 10px;
+    letter-spacing: 0.5px;
+    animation: pulseGlow 1.5s infinite;
+}
+
+@keyframes pulseGlow {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.75; transform: scale(1.05); }
+}
