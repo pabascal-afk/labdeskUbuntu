@@ -250,6 +250,45 @@ ipcMain.handle('turnIn:submitAssignment', async (e, { assignmentId, filename, co
     });
 });
 
+// Reportar actividad y telemetría de tarea en tiempo real
+ipcMain.handle('turnIn:reportActivity', (e, { assignmentId, studentId, studentName, status, metrics }) => {
+    if (agent && agent.socket && agent.socket.connected) {
+        agent.socket.emit('student_task_activity', {
+            assignmentId,
+            studentId,
+            studentName,
+            clientId: system.getMacAddress(),
+            clientName: system.getHostname(),
+            status: status || 'working',
+            metrics: metrics || {}
+        });
+        return true;
+    }
+    return false;
+});
+
+// Descargar plantilla inicial adjunta a la tarea
+ipcMain.handle('turnIn:fetchTemplate', async (e, relativeUrl) => {
+    return new Promise((resolve) => {
+        try {
+            if (!relativeUrl) return resolve({ success: false, error: 'URL vacía' });
+            const targetUrl = relativeUrl.startsWith('http') ? relativeUrl : (agent.serverUrl + (relativeUrl.startsWith('/') ? '' : '/') + relativeUrl);
+            const parsed = new URL(targetUrl);
+            http.get({
+                hostname: parsed.hostname,
+                port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+                path: parsed.pathname + (parsed.search || '')
+            }, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => resolve({ success: true, data }));
+            }).on('error', (err) => resolve({ success: false, error: err.message }));
+        } catch(err) {
+            resolve({ success: false, error: err.message });
+        }
+    });
+});
+
 // Entregar archivo al profesor (Buzón de tareas legado / compatibilidad)
 ipcMain.handle('turnIn:submitFile', async (e, { filename, content, appType, studentName, notes }) => {
     return new Promise((resolve, reject) => {

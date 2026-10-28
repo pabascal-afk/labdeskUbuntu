@@ -613,6 +613,18 @@ function initRemoteListeners() {
             updateActiveAssignmentUI(assignment);
         });
 
+        if (window.labdeskAPI.turnIn.onAssignmentReturned) {
+            window.labdeskAPI.turnIn.onAssignmentReturned((data) => {
+                showAssignmentReturnedNotification(data);
+            });
+        }
+
+        if (window.labdeskAPI.turnIn.onAssignmentTimeUp) {
+            window.labdeskAPI.turnIn.onAssignmentTimeUp((data) => {
+                showAssignmentTimeUpNotification(data);
+            });
+        }
+
         // Comprobación inicial de tarea activa
         window.labdeskAPI.turnIn.getActiveAssignment().then(data => {
             if (data && data.active && data.assignment) {
@@ -628,6 +640,52 @@ function initRemoteListeners() {
 // TAREA ASIGNADA ACTIVA EN EL ESCRITORIO
 // ==========================================
 let currentActiveAssignment = null;
+let assignmentCountdownTimer = null;
+
+function startAssignmentCountdown(timeLimitEnd) {
+    if (assignmentCountdownTimer) {
+        clearInterval(assignmentCountdownTimer);
+        assignmentCountdownTimer = null;
+    }
+    const timerBadge = document.getElementById('assignment-card-timer');
+    if (!timerBadge || !timeLimitEnd) {
+        if (timerBadge) timerBadge.style.display = 'none';
+        return;
+    }
+
+    timerBadge.style.display = 'inline-flex';
+
+    function tick() {
+        const remainingMs = new Date(timeLimitEnd).getTime() - Date.now();
+        if (remainingMs <= 0) {
+            timerBadge.textContent = '⏰ Tiempo Agotado';
+            timerBadge.style.background = '#ef4444';
+            timerBadge.style.color = '#ffffff';
+            timerBadge.classList.remove('pulse-timer');
+            clearInterval(assignmentCountdownTimer);
+            assignmentCountdownTimer = null;
+            return;
+        }
+
+        const totalSecs = Math.floor(remainingMs / 1000);
+        const mins = Math.floor(totalSecs / 60);
+        const secs = totalSecs % 60;
+        const formatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        timerBadge.textContent = `⏳ ${formatted}`;
+
+        if (totalSecs <= 300) {
+            timerBadge.style.background = '#ef4444';
+            timerBadge.style.color = '#ffffff';
+            timerBadge.classList.add('pulse-timer');
+        } else {
+            timerBadge.style.background = '#2563eb';
+            timerBadge.style.color = '#ffffff';
+            timerBadge.classList.remove('pulse-timer');
+        }
+    }
+    tick();
+    assignmentCountdownTimer = setInterval(tick, 1000);
+}
 
 function updateActiveAssignmentUI(assignment) {
     currentActiveAssignment = assignment;
@@ -636,6 +694,10 @@ function updateActiveAssignmentUI(assignment) {
 
     if (!assignment) {
         card.style.display = 'none';
+        if (assignmentCountdownTimer) {
+            clearInterval(assignmentCountdownTimer);
+            assignmentCountdownTimer = null;
+        }
         return;
     }
 
@@ -645,6 +707,25 @@ function updateActiveAssignmentUI(assignment) {
     document.getElementById('assignment-card-course').textContent = `🏫 ${assignment.course_name || 'Curso'}`;
     document.getElementById('assignment-card-mode').textContent = assignment.is_group ? `👥 Grupal (Máx. ${assignment.max_group_size || 4})` : '👤 Individual';
     document.getElementById('assignment-card-instructions').textContent = assignment.instructions || 'Sin instrucciones adicionales.';
+
+    // Badges Pro
+    const timerBadge = document.getElementById('assignment-card-timer');
+    if (assignment.time_limit_end) {
+        startAssignmentCountdown(assignment.time_limit_end);
+    } else if (timerBadge) {
+        timerBadge.style.display = 'none';
+        if (assignmentCountdownTimer) clearInterval(assignmentCountdownTimer);
+    }
+
+    const strictBadge = document.getElementById('assignment-card-strict');
+    if (strictBadge) {
+        strictBadge.style.display = assignment.strict_mode ? 'inline-flex' : 'none';
+    }
+
+    const templateBadge = document.getElementById('assignment-card-template');
+    if (templateBadge) {
+        templateBadge.style.display = assignment.template_file_path ? 'inline-flex' : 'none';
+    }
 
     const appBtn = document.getElementById('btn-assignment-open-app');
     const appType = (assignment.app_type || 'any').toLowerCase();
@@ -657,6 +738,16 @@ function updateActiveAssignmentUI(assignment) {
     } else {
         appBtn.textContent = '🚀 Abrir Editor de Trabajo';
     }
+}
+
+function showAssignmentReturnedNotification(data) {
+    const feedback = data.feedback || 'Tu profesor te ha devuelto el trabajo para que realices correcciones.';
+    alert(`↩️ OBSERVACIÓN DE TU PROFESOR:\n\n"${feedback}"\n\nPor favor abre tu editor para revisar y corregir tu entrega.`);
+    openAssignmentApp();
+}
+
+function showAssignmentTimeUpNotification(data) {
+    alert('⏰ ¡TIEMPO TERMINADO!\n\nEl profesor ha finalizado el tiempo límite para la tarea. Tus avances han sido recolectados.');
 }
 
 function openAssignmentApp() {

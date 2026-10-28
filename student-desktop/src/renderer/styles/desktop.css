@@ -688,6 +688,53 @@ body, html {
     justify-content: flex-end;
 }
 
+.assignment-timer-badge {
+    background: #2563eb;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 12px;
+    letter-spacing: 0.5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.assignment-strict-badge {
+    background: #dc2626;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.assignment-template-badge {
+    background: #059669;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+@keyframes pulse-timer {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.06); opacity: 0.85; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.pulse-timer {
+    animation: pulse-timer 1.2s infinite;
+}
+
 .btn-assignment-open {
     background: #2563eb;
     color: white;

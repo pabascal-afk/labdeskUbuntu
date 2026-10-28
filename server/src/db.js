@@ -189,11 +189,30 @@ function initSchema() {
             is_group INTEGER DEFAULT 0,
             max_group_size INTEGER DEFAULT 4,
             status TEXT DEFAULT 'draft',
+            template_file_path TEXT,
+            template_filename TEXT,
+            duration_minutes INTEGER DEFAULT 0,
+            time_limit_end DATETIME,
+            strict_mode INTEGER DEFAULT 0,
+            allow_auto_submit INTEGER DEFAULT 1,
             created_at DATETIME DEFAULT (datetime('now')),
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL,
             FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
-        )`);
+        )`, () => {
+            // Migración segura para bases de datos existentes
+            const newCols = [
+                'template_file_path TEXT',
+                'template_filename TEXT',
+                'duration_minutes INTEGER DEFAULT 0',
+                'time_limit_end DATETIME',
+                'strict_mode INTEGER DEFAULT 0',
+                'allow_auto_submit INTEGER DEFAULT 1'
+            ];
+            newCols.forEach(col => {
+                db.run(`ALTER TABLE assignments ADD COLUMN ${col}`, () => {});
+            });
+        });
 
         // Tabla de entregas de tareas vinculadas a la asignación
         db.run(`CREATE TABLE IF NOT EXISTS submissions (
@@ -209,8 +228,37 @@ function initSchema() {
             file_path TEXT NOT NULL,
             file_size INTEGER,
             notes TEXT,
+            grade TEXT,
+            feedback TEXT,
+            status TEXT DEFAULT 'submitted',
+            return_count INTEGER DEFAULT 0,
             created_at DATETIME DEFAULT (datetime('now')),
             FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE
+        )`, () => {
+            // Migración segura para bases de datos existentes
+            const newSubCols = [
+                'grade TEXT',
+                'feedback TEXT',
+                "status TEXT DEFAULT 'submitted'",
+                'return_count INTEGER DEFAULT 0'
+            ];
+            newSubCols.forEach(col => {
+                db.run(`ALTER TABLE submissions ADD COLUMN ${col}`, () => {});
+            });
+        });
+
+        // Tabla de matriz de avance y telemetría en tiempo real
+        db.run(`CREATE TABLE IF NOT EXISTS assignment_progress (
+            assignment_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,
+            client_id TEXT,
+            client_name TEXT,
+            status TEXT DEFAULT 'not_started',
+            metrics_json TEXT,
+            updated_at DATETIME DEFAULT (datetime('now')),
+            PRIMARY KEY (assignment_id, student_id),
+            FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE,
+            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
         )`);
     });
 }

@@ -176,6 +176,18 @@ class LabDeskAgent {
             console.log('📋 Notificación de tarea activa recibida:', data ? data.title : 'Ninguna');
             this.sendToRenderer('active_assignment_changed', data);
         });
+
+        // Devolución de Tarea por el Profesor para Corrección
+        this.socket.on('assignment_returned', (data) => {
+            console.log('↩️ Notificación de tarea devuelta para corrección:', data);
+            this.sendToRenderer('assignment_returned', data);
+        });
+
+        // Fin del Tiempo de Asignación (Temporizador de Sala)
+        this.socket.on('assignment_time_up', (data) => {
+            console.log('⏰ Notificación de tiempo agotado para tarea:', data);
+            this.sendToRenderer('assignment_time_up', data);
+        });
     }
 
     setLocked(locked, pin, message) {

@@ -132,10 +132,17 @@
         <div id="active-assignment-card" class="active-assignment-card" style="display:none;">
             <div class="assignment-card-header">
                 <span class="assignment-badge">📋 TAREA ASIGNADA EN LA SALA</span>
+                <span id="assignment-card-timer" class="assignment-timer-badge" style="display:none;">⏳ 00:00</span>
                 <button class="btn-minimize-assignment" onclick="toggleAssignmentCollapse()" title="Minimizar / Expandir">_</button>
             </div>
             <div class="assignment-card-content" id="assignment-card-content">
-                <h3 id="assignment-card-title">Título de la Tarea</h3>
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
+                    <h3 id="assignment-card-title" style="margin:0;">Título de la Tarea</h3>
+                    <div style="display:flex; gap:4px;">
+                        <span id="assignment-card-strict" class="assignment-strict-badge" style="display:none;">🔒 Modo Enfoque</span>
+                        <span id="assignment-card-template" class="assignment-template-badge" style="display:none;">📁 Plantilla</span>
+                    </div>
+                </div>
                 <p class="assignment-card-meta">
                     <span id="assignment-card-teacher">👨‍🏫 Profesor</span> • 
                     <span id="assignment-card-course">🏫 Curso</span> • 

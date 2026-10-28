@@ -79,6 +79,24 @@ function setupSocket() {
         if (isModalOpen('modal-botonera-assignments')) {
             fetchBotoneraAssignments();
         }
+        if (isModalOpen('modal-botonera-matrix')) {
+            refreshBotoneraProgressMatrix();
+        }
+    });
+
+    socket.on('assignment_progress_updated', () => {
+        if (isModalOpen('modal-botonera-matrix')) {
+            refreshBotoneraProgressMatrix();
+        }
+    });
+
+    socket.on('submission_graded', () => {
+        if (isModalOpen('modal-botonera-submissions')) {
+            refreshBotoneraSubmissions();
+        }
+        if (isModalOpen('modal-botonera-matrix')) {
+            refreshBotoneraProgressMatrix();
+        }
     });
 }
 
@@ -851,6 +869,16 @@ async function fetchBotoneraAssignments() {
     }
 }
 
+let currentBotoneraMatrixId = null;
+let currentBotoneraPreviewSub = null;
+
+function toggleBotoneraCustomDuration(val) {
+    const customInput = document.getElementById('b-assign-duration-custom');
+    if (!customInput) return;
+    customInput.style.display = val === 'custom' ? 'inline-block' : 'none';
+    if (val === 'custom') customInput.focus();
+}
+
 function renderBotoneraAssignmentsCards() {
     const container = document.getElementById('botonera-assignments-cards');
     if (!container) return;
@@ -878,10 +906,13 @@ function renderBotoneraAssignmentsCards() {
                             ${isActive ? '<span class="badge-active-pulse">● ASIGNADA EN SALA</span>' : ''}
                             <span>${escapeHtml(a.title)}</span>
                         </h4>
-                        <div class="botonera-assignment-meta-row">
+                        <div class="botonera-assignment-meta-row" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:4px;">
                             <span>🏫 <strong>${escapeHtml(a.course_name)}</strong></span>
                             <span>💻 ${appLabel}</span>
                             <span>${modeLabel}</span>
+                            ${a.duration_minutes > 0 ? `<span class="badge" style="background:#2563eb; color:white; font-size:10px; padding:2px 6px; border-radius:4px;">⏳ ${a.duration_minutes}m</span>` : ''}
+                            ${a.strict_mode ? `<span class="badge" style="background:#dc2626; color:white; font-size:10px; padding:2px 6px; border-radius:4px;">🔒 Enfoque</span>` : ''}
+                            ${a.template_filename ? `<span class="badge" style="background:#059669; color:white; font-size:10px; padding:2px 6px; border-radius:4px;">📁 Plantilla</span>` : ''}
                             ${a.folder_name ? `<span>📁 ${escapeHtml(a.folder_name)}</span>` : ''}
                         </div>
                     </div>
@@ -904,9 +935,15 @@ function renderBotoneraAssignmentsCards() {
                             </button>
                         `}
                     </div>
-                    <div>
-                        <button class="btn-action" style="font-size:12px; padding:6px 12px;" onclick="viewBotoneraSubmissions(${a.id}, '${escapeHtml(a.title)}', '${escapeHtml(a.course_name)}', '${escapeHtml(a.teacher_name)}')">
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button class="btn-action" style="font-size:12px; padding:6px 10px;" onclick="openBotoneraProgressMatrix(${a.id}, '${escapeHtml(a.title)}', '${escapeHtml(a.course_name)}')">
+                            📊 Matriz
+                        </button>
+                        <button class="btn-action" style="font-size:12px; padding:6px 10px;" onclick="viewBotoneraSubmissions(${a.id}, '${escapeHtml(a.title)}', '${escapeHtml(a.course_name)}', '${escapeHtml(a.teacher_name)}')">
                             📥 Entregas (${a.submission_count || 0})
+                        </button>
+                        <button class="btn-action btn-send" style="font-size:12px; padding:6px 10px;" onclick="exportBotoneraGradesExcel(${a.id})" title="Exportar Notas a Excel">
+                            📗 Excel
                         </button>
                     </div>
                 </div>
@@ -930,19 +967,38 @@ async function saveBotoneraAssignment() {
         return;
     }
 
-    const payload = { folder_id, course_id, title, instructions, app_type, is_group, max_group_size };
+    let duration = document.getElementById('b-assign-duration').value;
+    if (duration === 'custom') {
+        duration = document.getElementById('b-assign-duration-custom').value || 0;
+    }
+    const strict_mode = document.getElementById('b-assign-strict-check').checked ? 1 : 0;
+
+    const formData = new FormData();
+    formData.append('title', title);
+    formData.append('course_id', course_id);
+    if (folder_id) formData.append('folder_id', folder_id);
+    formData.append('app_type', app_type);
+    formData.append('is_group', is_group ? 1 : 0);
+    formData.append('max_group_size', max_group_size);
+    formData.append('instructions', instructions);
+    formData.append('duration_minutes', parseInt(duration, 10) || 0);
+    formData.append('strict_mode', strict_mode);
+
+    const fileInput = document.getElementById('b-assign-template-file');
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+        formData.append('template_file', fileInput.files[0]);
+    }
 
     try {
         const url = id ? `/api/assignments/${id}` : '/api/assignments';
         const method = id ? 'PUT' : 'POST';
         const res = await authFetch(url, {
             method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: formData
         });
 
         if (res.ok) {
-            showToast(id ? 'Tarea actualizada' : 'Tarea creada');
+            showToast(id ? 'Tarea actualizada' : 'Tarea creada correctamente con opciones Pro');
             toggleBotoneraAssignmentForm(false);
             fetchBotoneraAssignments();
         } else {
@@ -992,6 +1048,109 @@ async function deactivateBotoneraAssignment(id) {
 }
 
 // ==============================================================
+// MATRIZ Y SEMÁFORO DE AVANCE EN TIEMPO REAL (BOTONERA)
+// ==============================================================
+async function openBotoneraProgressMatrix(assignId, title, course) {
+    currentBotoneraMatrixId = assignId;
+    document.getElementById('b-matrix-title').textContent = `📊 Matriz en Vivo: ${title || 'Tarea'}`;
+    openModal('modal-botonera-matrix');
+    await refreshBotoneraProgressMatrix();
+}
+
+async function refreshBotoneraProgressMatrix() {
+    if (!currentBotoneraMatrixId) return;
+    try {
+        const res = await authFetch(`/api/assignments/${currentBotoneraMatrixId}/progress-matrix`);
+        if (!res.ok) return;
+        const data = await res.json();
+        renderBotoneraProgressMatrixData(data);
+    } catch(err) {
+        console.error('Error actualizando matriz en botonera:', err);
+    }
+}
+
+function renderBotoneraProgressMatrixData(data) {
+    const { assignment, summary, students } = data;
+
+    document.getElementById('b-mat-total').textContent = summary.total || 0;
+    document.getElementById('b-mat-notstarted').textContent = summary.not_started || 0;
+    document.getElementById('b-mat-working').textContent = summary.working || 0;
+    document.getElementById('b-mat-submitted').textContent = (summary.submitted || 0) + (summary.graded || 0);
+    document.getElementById('b-mat-returned').textContent = summary.returned || 0;
+
+    const percent = summary.percent_completed || 0;
+    document.getElementById('b-mat-percent').textContent = `${percent}%`;
+    document.getElementById('b-mat-bar').style.width = `${percent}%`;
+
+    const activeBadge = document.getElementById('b-matrix-active-badge');
+    if (activeBadge) {
+        activeBadge.style.display = assignment.status === 'active' ? 'inline-block' : 'none';
+    }
+
+    const grid = document.getElementById('b-matrix-grid');
+    if (!grid) return;
+
+    if (!students || students.length === 0) {
+        grid.innerHTML = '<p class="text-center text-muted" style="grid-column:1/-1; padding:20px;">No hay alumnos registrados en el curso.</p>';
+        return;
+    }
+
+    grid.innerHTML = students.map(s => {
+        let badgeHtml = '';
+        let borderCol = 'rgba(255,255,255,0.08)';
+        let bg = 'rgba(15, 23, 42, 0.6)';
+
+        if (s.status === 'graded') {
+            badgeHtml = `<span class="badge" style="background:#10b981; color:white; font-size:10px;">🟢 Calificado (${s.submission?.grade || 'OK'})</span>`;
+            borderCol = '#10b981';
+            bg = 'rgba(16, 185, 129, 0.12)';
+        } else if (s.status === 'submitted') {
+            badgeHtml = `<span class="badge" style="background:#10b981; color:white; font-size:10px;">🟢 Entregado</span>`;
+            borderCol = '#10b981';
+            bg = 'rgba(16, 185, 129, 0.08)';
+        } else if (s.status === 'returned') {
+            badgeHtml = `<span class="badge" style="background:#ea580c; color:white; font-size:10px;">🟠 En Corrección</span>`;
+            borderCol = '#ea580c';
+            bg = 'rgba(234, 88, 12, 0.12)';
+        } else if (s.status === 'working') {
+            badgeHtml = `<span class="badge" style="background:#ca8a04; color:white; font-size:10px;">🟡 Trabajando</span>`;
+            borderCol = '#ca8a04';
+            bg = 'rgba(202, 138, 4, 0.12)';
+        } else {
+            badgeHtml = `<span class="badge" style="background:#475569; color:#cbd5e1; font-size:10px;">⚪ Sin Iniciar</span>`;
+        }
+
+        let details = '';
+        if (s.client_name) details += `<small style="display:block; color:var(--text-dim); font-size:10px;">PC: ${escapeHtml(s.client_name)}</small>`;
+        if (s.metrics?.words) details += `<small style="display:block; color:var(--led-blue); font-size:10px;">📝 ${s.metrics.words} palabras</small>`;
+
+        return `
+            <div style="background:${bg}; border:1px solid ${borderCol}; border-radius:6px; padding:8px 10px; display:flex; flex-direction:column; justify-content:space-between;">
+                <div>
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:4px;">
+                        <strong style="font-size:12px; color:#f8fafc;">${escapeHtml(s.full_name)}</strong>
+                        ${badgeHtml}
+                    </div>
+                    ${details}
+                </div>
+                ${s.submission ? `
+                    <div style="margin-top:6px; display:flex; justify-content:flex-end;">
+                        <button class="btn-action" style="padding:2px 8px; font-size:10px;" onclick="previewBotoneraSubmissionObject(${JSON.stringify(s.submission).replace(/"/g, '&quot;')})">
+                            👁️ Ver/Calificar
+                        </button>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+function exportBotoneraGradesExcel(assignId) {
+    if (!assignId) return;
+    window.location.href = `/api/assignments/${assignId}/export-grades`;
+}
+
+// ==============================================================
 // BANDEJA DE ENTREGAS Y DESCARGA ZIP EN LA BOTONERA
 // ==============================================================
 async function viewBotoneraSubmissions(assignId, title, course, teacher) {
@@ -1032,16 +1191,25 @@ function renderBotoneraSubmissionsTable(submissions) {
 
         const dateStr = s.created_at ? new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--';
 
+        let statusBadge = '<span class="badge" style="background:#10b981; color:white; font-size:10px; padding:2px 6px; border-radius:4px;">Entregado</span>';
+        if (s.status === 'graded') {
+            statusBadge = '<span class="badge" style="background:#059669; color:white; font-size:10px; padding:2px 6px; border-radius:4px;">Calificado</span>';
+        } else if (s.status === 'returned') {
+            statusBadge = '<span class="badge" style="background:#ea580c; color:white; font-size:10px; padding:2px 6px; border-radius:4px;">Devuelto</span>';
+        }
+
+        const gradeDisplay = s.grade ? `<strong style="color:var(--led-blue); font-size:13px;">${escapeHtml(s.grade)}</strong>` : '<span style="color:var(--text-dim);">-</span>';
+
         return `
             <tr>
                 <td><small>${dateStr}</small></td>
                 <td>${studentText}</td>
                 <td><small>${escapeHtml(s.client_name || s.client_id)}</small></td>
-                <td><span class="badge" style="background:#1e293b; color:#38bdf8; padding:2px 6px; border-radius:4px; font-size:11px;">${escapeHtml(s.app_type || 'Doc')}</span></td>
+                <td>${statusBadge}</td>
+                <td>${gradeDisplay}</td>
                 <td><small>${escapeHtml(s.filename)}</small></td>
-                <td><small style="color:var(--text-dim);">${escapeHtml(s.notes || '-')}</small></td>
                 <td>
-                    <button class="btn-action" style="padding:2px 8px; font-size:11px;" onclick="previewBotoneraSubmission('${s.file_path}', '${escapeHtml(s.filename)}')">👁️</button>
+                    <button class="btn-action" style="padding:2px 8px; font-size:11px;" onclick="previewBotoneraSubmissionObject(${JSON.stringify(s).replace(/"/g, '&quot;')})">👁️ Calificar</button>
                     <a href="${s.file_path}" class="btn-action" download="${escapeHtml(s.filename)}" style="padding:2px 8px; font-size:11px; text-decoration:none;">⬇️</a>
                     <button class="btn-botonera-del" onclick="deleteBotoneraSubmissionRecord(${s.id})">🗑️</button>
                 </td>
@@ -1055,25 +1223,31 @@ function downloadBotoneraSubmissionsZip() {
     window.location.href = `/api/assignments/${botoneraViewingAssignId}/download-all`;
 }
 
-function previewBotoneraSubmission(fileUrl, filename) {
+function previewBotoneraSubmissionObject(submission) {
+    currentBotoneraPreviewSub = submission;
     const frame = document.getElementById('b-preview-frame');
     const pre = document.getElementById('b-preview-text');
     const titleEl = document.getElementById('b-preview-title');
     const downloadBtn = document.getElementById('b-preview-download-btn');
 
-    titleEl.textContent = `👁️ ${filename}`;
-    downloadBtn.href = fileUrl;
-    downloadBtn.download = filename;
+    titleEl.textContent = `👁️ ${submission.filename} (${submission.main_student_name || 'Estudiante'})`;
+    downloadBtn.href = submission.file_path;
+    downloadBtn.download = submission.filename;
 
-    if (filename.endsWith('.html') || filename.endsWith('.htm')) {
+    const gradeInput = document.getElementById('b-preview-grade-input');
+    const feedbackInput = document.getElementById('b-preview-feedback-input');
+    if (gradeInput) gradeInput.value = submission.grade || '';
+    if (feedbackInput) feedbackInput.value = submission.feedback || '';
+
+    if (submission.filename.endsWith('.html') || submission.filename.endsWith('.htm')) {
         frame.style.display = 'block';
         pre.style.display = 'none';
-        frame.src = fileUrl;
+        frame.src = submission.file_path;
     } else {
         frame.style.display = 'none';
         pre.style.display = 'block';
         pre.textContent = 'Cargando contenido...';
-        fetch(fileUrl)
+        fetch(submission.file_path)
             .then(res => res.text())
             .then(txt => {
                 try {
@@ -1089,6 +1263,56 @@ function previewBotoneraSubmission(fileUrl, filename) {
     }
 
     openModal('modal-botonera-preview');
+}
+
+async function saveBotoneraPreviewGrade() {
+    if (!currentBotoneraPreviewSub) return;
+    const grade = document.getElementById('b-preview-grade-input').value.trim();
+    const feedback = document.getElementById('b-preview-feedback-input').value.trim();
+
+    try {
+        const res = await authFetch(`/api/submissions/${currentBotoneraPreviewSub.id}/grade`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ grade, feedback })
+        });
+        if (res.ok) {
+            showToast('✅ Calificación guardada');
+            currentBotoneraPreviewSub.grade = grade;
+            currentBotoneraPreviewSub.feedback = feedback;
+            currentBotoneraPreviewSub.status = 'graded';
+            if (botoneraViewingAssignId) refreshBotoneraSubmissions();
+            if (currentBotoneraMatrixId) refreshBotoneraProgressMatrix();
+        } else {
+            alert('Error al guardar nota.');
+        }
+    } catch(err) {
+        console.error('Error guardando nota:', err);
+    }
+}
+
+async function returnBotoneraPreviewSubmission() {
+    if (!currentBotoneraPreviewSub) return;
+    const feedback = document.getElementById('b-preview-feedback-input').value.trim();
+    if (!confirm('¿Devolver trabajo al estudiante para corrección?')) return;
+
+    try {
+        const res = await authFetch(`/api/submissions/${currentBotoneraPreviewSub.id}/return`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ feedback })
+        });
+        if (res.ok) {
+            showToast('↩️ Tarea devuelta al estudiante');
+            closeModal('modal-botonera-preview');
+            if (botoneraViewingAssignId) refreshBotoneraSubmissions();
+            if (currentBotoneraMatrixId) refreshBotoneraProgressMatrix();
+        } else {
+            alert('Error al devolver entrega.');
+        }
+    } catch(err) {
+        console.error('Error devolviendo entrega:', err);
+    }
 }
 
 async function deleteBotoneraSubmissionRecord(id) {

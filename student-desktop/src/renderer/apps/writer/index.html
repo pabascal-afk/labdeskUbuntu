@@ -573,19 +573,32 @@
             window.print();
         }
 
+        const writerTurnInConfig = {
+            appType: 'Mini Writer',
+            getFilename: (studentName) => {
+                const title = titleInput.value.trim() || 'documento';
+                return `${title.replace(/[^a-zA-Z0-9_\-]/g, '_')}_${studentName.replace(/[^a-zA-Z0-9_\-]/g, '_')}.html`;
+            },
+            getContent: () => editor.innerHTML,
+            setContent: (html) => {
+                editor.innerHTML = html;
+                updateStats();
+            },
+            getMetrics: () => ({
+                words: parseInt(wordCountEl.textContent, 10) || 0
+            }),
+            onSuccess: () => {
+                saveStatusEl.textContent = '✅ Entregado al profesor exitosamente';
+            }
+        };
+
+        if (typeof LabDeskTurnIn !== 'undefined' && LabDeskTurnIn.registerApp) {
+            LabDeskTurnIn.registerApp(writerTurnInConfig);
+        }
+
         function turnInDocument() {
             if (typeof LabDeskTurnIn !== 'undefined') {
-                LabDeskTurnIn.open({
-                    appType: 'Mini Writer',
-                    getFilename: (studentName) => {
-                        const title = titleInput.value.trim() || 'documento';
-                        return `${title.replace(/[^a-zA-Z0-9_\-]/g, '_')}_${studentName.replace(/[^a-zA-Z0-9_\-]/g, '_')}.html`;
-                    },
-                    getContent: () => editor.innerHTML,
-                    onSuccess: () => {
-                        saveStatusEl.textContent = '✅ Entregado al profesor exitosamente';
-                    }
-                });
+                LabDeskTurnIn.open(writerTurnInConfig);
             } else {
                 alert('Módulo de entregas no disponible');
             }

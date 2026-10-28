@@ -513,7 +513,7 @@
                                 </div>
                             </div>
 
-                            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin-top:8px;">
+                            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:10px; margin-top:8px;">
                                 <div class="form-group">
                                     <label for="assign-folder">Carpeta:</label>
                                     <select id="assign-folder" class="select-box">
@@ -530,6 +530,18 @@
                                     </select>
                                 </div>
                                 <div class="form-group">
+                                    <label for="assign-duration">⏳ Temporizador:</label>
+                                    <select id="assign-duration" class="select-box" onchange="toggleCustomDuration(this.value)">
+                                        <option value="0">Sin límite</option>
+                                        <option value="15">15 minutos</option>
+                                        <option value="30">30 minutos</option>
+                                        <option value="45">45 minutos</option>
+                                        <option value="60">60 minutos</option>
+                                        <option value="custom">Personalizado...</option>
+                                    </select>
+                                    <input type="number" id="assign-duration-custom" class="input-text" placeholder="Min" min="1" max="180" style="display:none; margin-top:4px; width:90px;">
+                                </div>
+                                <div class="form-group">
                                     <label for="assign-group-check" style="display:flex; align-items:center; gap:6px; margin-top:24px; cursor:pointer;">
                                         <input type="checkbox" id="assign-group-check" onchange="document.getElementById('assign-group-size-wrap').style.display = this.checked ? 'block' : 'none'">
                                         <span>¿Trabajo Grupal?</span>
@@ -540,6 +552,20 @@
                             <div id="assign-group-size-wrap" class="form-group" style="display:none; margin-top:6px;">
                                 <label for="assign-max-group">Máximo Integrantes por Grupo:</label>
                                 <input type="number" id="assign-max-group" class="input-text" min="2" max="10" value="4" style="width:120px;">
+                            </div>
+
+                            <div style="display:grid; grid-template-columns: 2fr 1fr; gap:10px; margin-top:8px; align-items:flex-end;">
+                                <div class="form-group">
+                                    <label for="assign-template-file">📁 Plantilla de Inicio (Opcional - .html, .calc.json, .slides.json):</label>
+                                    <input type="file" id="assign-template-file" class="input-text" accept=".html,.json,.calc.json,.slides.json,.txt">
+                                    <span id="assign-current-template-info" style="font-size:0.8rem; color:#10b981; display:none; margin-top:2px;"></span>
+                                </div>
+                                <div class="form-group">
+                                    <label for="assign-strict-check" style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-bottom:8px;">
+                                        <input type="checkbox" id="assign-strict-check">
+                                        <span style="font-weight:600; color:#f87171;">🔒 Modo Enfoque Estricto</span>
+                                    </label>
+                                </div>
                             </div>
 
                             <div class="form-group" style="margin-top:8px;">
@@ -568,10 +594,71 @@
     </div>
 
     <!-- ============================================== -->
+    <!-- MODAL: MATRIZ Y SEMÁFORO DE AVANCE EN VIVO     -->
+    <!-- ============================================== -->
+    <div id="modal-progress-matrix" class="modal">
+        <div class="modal-content modal-wide" style="max-width: 1050px;">
+            <div class="modal-header">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <h3 id="matrix-modal-title" style="margin:0;">📊 Matriz de Avance en Vivo</h3>
+                    <span id="matrix-active-tag" class="badge" style="background:#10b981; color:white; font-size:0.75rem; display:none; padding:2px 8px; border-radius:12px;">EN SALA</span>
+                </div>
+                <button class="btn-close" onclick="closeModal('modal-progress-matrix')">&times;</button>
+            </div>
+            <div class="modal-body" style="padding:14px 18px;">
+                <!-- Barra de resumen superior -->
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:10px; margin-bottom:14px;">
+                    <div class="matrix-stat-card" style="background:rgba(255,255,255,0.05); padding:10px; border-radius:6px; text-align:center;">
+                        <span style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase;">Alumnos Curso</span>
+                        <h2 id="matrix-total-count" style="margin:4px 0 0; font-size:1.4rem;">0</h2>
+                    </div>
+                    <div class="matrix-stat-card" style="background:rgba(100,116,139,0.15); padding:10px; border-radius:6px; text-align:center; border-left:3px solid #64748b;">
+                        <span style="font-size:0.75rem; color:#cbd5e1; text-transform:uppercase;">⚪ Sin Iniciar</span>
+                        <h2 id="matrix-notstarted-count" style="margin:4px 0 0; font-size:1.4rem; color:#94a3b8;">0</h2>
+                    </div>
+                    <div class="matrix-stat-card" style="background:rgba(234,179,8,0.15); padding:10px; border-radius:6px; text-align:center; border-left:3px solid #eab308;">
+                        <span style="font-size:0.75rem; color:#fde047; text-transform:uppercase;">🟡 Trabajando</span>
+                        <h2 id="matrix-working-count" style="margin:4px 0 0; font-size:1.4rem; color:#eab308;">0</h2>
+                    </div>
+                    <div class="matrix-stat-card" style="background:rgba(16,185,129,0.15); padding:10px; border-radius:6px; text-align:center; border-left:3px solid #10b981;">
+                        <span style="font-size:0.75rem; color:#6ee7b7; text-transform:uppercase;">🟢 Entregados</span>
+                        <h2 id="matrix-submitted-count" style="margin:4px 0 0; font-size:1.4rem; color:#10b981;">0</h2>
+                    </div>
+                    <div class="matrix-stat-card" style="background:rgba(249,115,22,0.15); padding:10px; border-radius:6px; text-align:center; border-left:3px solid #f97316;">
+                        <span style="font-size:0.75rem; color:#fdba74; text-transform:uppercase;">🟠 En Corrección</span>
+                        <h2 id="matrix-returned-count" style="margin:4px 0 0; font-size:1.4rem; color:#f97316;">0</h2>
+                    </div>
+                </div>
+
+                <!-- Barra de progreso general -->
+                <div style="margin-bottom:14px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:0.85rem;">
+                        <span style="color:#94a3b8;">Progreso de Entregas del Curso:</span>
+                        <strong id="matrix-percent-label" style="color:#60a5fa;">0%</strong>
+                    </div>
+                    <div style="height:10px; background:rgba(255,255,255,0.1); border-radius:5px; overflow:hidden;">
+                        <div id="matrix-progress-bar" style="height:100%; width:0%; background:linear-gradient(90deg, #3b82f6, #10b981); transition:width 0.4s ease;"></div>
+                    </div>
+                </div>
+
+                <!-- Grid de estudiantes -->
+                <div id="matrix-grid-container" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:10px; max-height:420px; overflow-y:auto; padding-right:4px;">
+                    <!-- Se llena dinámicamente -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('modal-progress-matrix')">Cerrar</button>
+                <button class="btn btn-success btn-sm" onclick="exportGradesExcel(currentMatrixAssignmentId)">📗 Exportar a Excel (.xlsx)</button>
+                <button class="btn btn-primary btn-sm" onclick="refreshProgressMatrix()">🔄 Refrescar Matriz</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
     <!-- MODAL: BANDEJA DE ENTREGAS DE UNA TAREA        -->
     <!-- ============================================== -->
     <div id="modal-submissions" class="modal">
-        <div class="modal-content modal-wide">
+        <div class="modal-content modal-wide" style="max-width: 1050px;">
             <div class="modal-header">
                 <h3 id="submissions-modal-title">📥 Entregas Recibidas</h3>
                 <button class="btn-close" onclick="closeModal('modal-submissions')">&times;</button>
@@ -582,9 +669,17 @@
                         <strong id="sub-assignment-name" style="font-size:1.1rem; color:#60a5fa;">Tarea</strong>
                         <p id="sub-assignment-meta" style="margin:2px 0 0 0; font-size:0.85rem; color:var(--text-muted);">Curso • Profesor</p>
                     </div>
-                    <button class="btn btn-success" id="btn-download-all-zip" onclick="downloadAllSubmissionsZip()">
-                        📦 Descargar Todas en ZIP
-                    </button>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-secondary btn-sm" onclick="openProgressMatrix(currentSubmissionsAssignmentId)">
+                            📊 Ver Matriz en Vivo
+                        </button>
+                        <button class="btn btn-success btn-sm" onclick="exportGradesExcel(currentSubmissionsAssignmentId)">
+                            📗 Exportar a Excel (.xlsx)
+                        </button>
+                        <button class="btn btn-primary btn-sm" id="btn-download-all-zip" onclick="downloadAllSubmissionsZip()">
+                            📦 Descargar Todas en ZIP
+                        </button>
+                    </div>
                 </div>
 
                 <div class="table-container" style="max-height:350px; overflow-y:auto;">
@@ -594,9 +689,9 @@
                                 <th>Fecha/Hora</th>
                                 <th>Estudiante(s)</th>
                                 <th>Estación</th>
-                                <th>App</th>
+                                <th>Estado</th>
+                                <th>Nota</th>
                                 <th>Archivo</th>
-                                <th>Notas</th>
                                 <th>Acciones</th>
                             </tr>
                         </thead>
@@ -614,19 +709,39 @@
     </div>
 
     <!-- ============================================== -->
-    <!-- MODAL: PREVISUALIZADOR DE DOCUMENTOS           -->
+    <!-- MODAL: PREVISUALIZADOR Y CALIFICADOR           -->
     <!-- ============================================== -->
     <div id="modal-preview" class="modal">
-        <div class="modal-content modal-wide">
+        <div class="modal-content modal-wide" style="max-width: 1000px;">
             <div class="modal-header">
-                <h3 id="preview-title">👁️ Vista Previa del Trabajo</h3>
+                <h3 id="preview-title">👁️ Vista Previa & Calificación del Trabajo</h3>
                 <button class="btn-close" onclick="closeModal('modal-preview')">&times;</button>
             </div>
             <div class="modal-body" style="padding:0;">
                 <iframe id="preview-iframe" class="preview-modal-frame"></iframe>
                 <pre id="preview-text" style="display:none; padding:16px; margin:0; background:#0b1120; color:#4ade80; font-family:monospace; max-height:480px; overflow-y:auto; white-space:pre-wrap;"></pre>
+                
+                <!-- Barra de Calificación y Retroalimentación Rápida -->
+                <div id="preview-grading-bar" style="padding:12px 16px; background:#0b1120; border-top:1px solid var(--border-color); display:flex; flex-wrap:wrap; align-items:center; gap:10px; justify-content:space-between;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <label for="preview-grade-input" style="font-weight:600; font-size:0.85rem; color:#93c5fd;">Calificación / Nota:</label>
+                        <input type="text" id="preview-grade-input" class="input-text" placeholder="Ej: 6.5 o 90%" style="width:110px; padding:6px 10px; font-weight:700;">
+                    </div>
+                    <div style="flex:1; min-width:240px;">
+                        <input type="text" id="preview-feedback-input" class="input-text" placeholder="Observaciones / Retroalimentación pedagógica para el estudiante..." style="width:100%; padding:6px 10px;">
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                        <button class="btn btn-primary btn-sm" onclick="savePreviewGrade()">💾 Guardar Nota</button>
+                        <button class="btn btn-warning btn-sm" style="background:#ea580c; border-color:#ea580c; color:white;" onclick="returnPreviewSubmission()">↩️ Devolver para Corregir</button>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('modal-preview')">Cerrar</button>
+                <a id="preview-download-btn" href="#" class="btn btn-primary" download>⬇️ Descargar Archivo</a>
+            </div>
+        </div>
+    </div>
                 <button class="btn btn-secondary" onclick="closeModal('modal-preview')">Cerrar</button>
                 <a id="preview-download-btn" href="#" class="btn btn-primary" download>⬇️ Descargar Archivo</a>
             </div>

@@ -744,22 +744,49 @@
             }
         }
 
+        function loadSheetData(obj) {
+            if (!obj) return;
+            if (obj.title) document.getElementById('sheet-title').value = obj.title;
+            if (obj.cellData) {
+                Object.keys(cellData).forEach(k => delete cellData[k]);
+                Object.assign(cellData, obj.cellData);
+                buildGrid();
+            }
+        }
+
+        const calcTurnInConfig = {
+            appType: 'Mini Calc',
+            getFilename: (studentName) => {
+                const title = document.getElementById('sheet-title').value.trim() || 'planilla';
+                return `${title.replace(/[^a-zA-Z0-9_\-]/g, '_')}_${studentName.replace(/[^a-zA-Z0-9_\-]/g, '_')}.calc.json`;
+            },
+            getContent: () => {
+                const title = document.getElementById('sheet-title').value.trim() || 'planilla';
+                return JSON.stringify({ title, cellData, cols: COLS, rows: ROWS }, null, 2);
+            },
+            setContent: (raw) => {
+                try {
+                    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                    loadSheetData(parsed);
+                } catch(e) {
+                    console.error('Error cargando plantilla de planilla:', e);
+                }
+            },
+            getMetrics: () => ({
+                cells: Object.keys(cellData).length
+            }),
+            onSuccess: () => {
+                saveStatusEl.textContent = '✅ Entregado al profesor exitosamente';
+            }
+        };
+
+        if (typeof LabDeskTurnIn !== 'undefined' && LabDeskTurnIn.registerApp) {
+            LabDeskTurnIn.registerApp(calcTurnInConfig);
+        }
+
         function turnInSheet() {
             if (typeof LabDeskTurnIn !== 'undefined') {
-                LabDeskTurnIn.open({
-                    appType: 'Mini Calc',
-                    getFilename: (studentName) => {
-                        const title = document.getElementById('sheet-title').value.trim() || 'planilla';
-                        return `${title.replace(/[^a-zA-Z0-9_\-]/g, '_')}_${studentName.replace(/[^a-zA-Z0-9_\-]/g, '_')}.calc.json`;
-                    },
-                    getContent: () => {
-                        const title = document.getElementById('sheet-title').value.trim() || 'planilla';
-                        return JSON.stringify({ title, cellData, cols: COLS, rows: ROWS }, null, 2);
-                    },
-                    onSuccess: () => {
-                        saveStatusEl.textContent = '✅ Entregado al profesor exitosamente';
-                    }
-                });
+                LabDeskTurnIn.open(calcTurnInConfig);
             } else {
                 alert('Módulo de entregas no disponible');
             }

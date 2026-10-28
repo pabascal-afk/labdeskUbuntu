@@ -5,11 +5,70 @@ window.LabDeskTurnIn = {
     courses: [],
     students: [],
     selectedMembers: [],
+    templateLoaded: false,
+    activityInterval: null,
 
     getAPI() {
         if (window.labdeskAPI && window.labdeskAPI.turnIn) return window.labdeskAPI;
         if (window.parent && window.parent.labdeskAPI && window.parent.labdeskAPI.turnIn) return window.parent.labdeskAPI;
         return null;
+    },
+
+    registerApp(config) {
+        this.currentConfig = config || {};
+        const api = this.getAPI();
+        if (!api) return;
+
+        // Verificar si hay tarea activa con plantilla
+        api.turnIn.getActiveAssignment().then(actData => {
+            if (actData && actData.active && actData.assignment) {
+                this.activeAssignment = actData.assignment;
+                if (this.activeAssignment.template_file_path && !this.templateLoaded && typeof this.currentConfig.setContent === 'function') {
+                    api.turnIn.fetchTemplate(this.activeAssignment.template_file_path).then(res => {
+                        if (res && res.success && res.data) {
+                            this.currentConfig.setContent(res.data);
+                            this.templateLoaded = true;
+                        }
+                    }).catch(() => {});
+                }
+            }
+        }).catch(() => {});
+
+        // Escuchar devoluciones de tarea en tiempo real
+        if (api.turnIn.onAssignmentReturned) {
+            api.turnIn.onAssignmentReturned((sub) => {
+                this.handleAssignmentReturned(sub);
+            });
+        }
+
+        // Escuchar fin de tiempo para auto-entrega
+        if (api.turnIn.onAssignmentTimeUp) {
+            api.turnIn.onAssignmentTimeUp((info) => {
+                this.handleAssignmentTimeUp(info);
+            });
+        }
+    },
+
+    handleAssignmentReturned(sub) {
+        const feedback = sub.feedback || 'Tu profesor te ha devuelto el trabajo para realizar correcciones.';
+        alert(`↩️ OBSERVACIÓN DE TU PROFESOR:\n\n"${feedback}"\n\nVamos a cargar tu entrega previa para que puedas corregirla.`);
+        if (sub.filePath && typeof this.currentConfig?.setContent === 'function') {
+            const api = this.getAPI();
+            if (api && api.turnIn && api.turnIn.fetchTemplate) {
+                api.turnIn.fetchTemplate(sub.filePath).then(res => {
+                    if (res && res.success && res.data) {
+                        this.currentConfig.setContent(res.data);
+                    }
+                }).catch(() => {});
+            }
+        }
+    },
+
+    handleAssignmentTimeUp(info) {
+        if (!this.activeAssignment || this.activeAssignment.id !== info.assignmentId) return;
+        alert('⏰ ¡TIEMPO LÍMITE ALCANZADO!\n\nEl profesor ha cerrado el tiempo de la tarea. Procediendo a enviar tu avance actual automáticamente.');
+        const mainStudent = (this.selectedMembers && this.selectedMembers[0]) || 'Estudiante';
+        this.submit();
     },
 
     async open(config) {
@@ -219,6 +278,21 @@ window.LabDeskTurnIn = {
                 this.selectedMembers.push(studentName);
             } else {
                 this.selectedMembers[0] = studentName;
+            }
+
+            // Reportar telemetría de alumno trabajando
+            if (this.activeAssignment) {
+                const api = this.getAPI();
+                const studentObj = (this.students || []).find(s => s.full_name === studentName);
+                if (api && api.turnIn && api.turnIn.reportActivity) {
+                    api.turnIn.reportActivity({
+                        assignmentId: this.activeAssignment.id,
+                        studentId: studentObj ? studentObj.id : 0,
+                        studentName: studentName,
+                        status: 'working',
+                        metrics: typeof this.currentConfig?.getMetrics === 'function' ? this.currentConfig.getMetrics() : null
+                    });
+                }
             }
         }
         this.renderChips();

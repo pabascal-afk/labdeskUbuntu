@@ -49,7 +49,11 @@ contextBridge.exposeInMainWorld('labdeskAPI', {
         getCourses: () => ipcRenderer.invoke('turnIn:getCourses'),
         getStudents: (courseId) => ipcRenderer.invoke('turnIn:getStudents', courseId),
         submitAssignment: (data) => ipcRenderer.invoke('turnIn:submitAssignment', data),
-        onActiveAssignmentChanged: (callback) => ipcRenderer.on('active_assignment_changed', (e, data) => callback(data))
+        reportActivity: (data) => ipcRenderer.invoke('turnIn:reportActivity', data),
+        fetchTemplate: (url) => ipcRenderer.invoke('turnIn:fetchTemplate', url),
+        onActiveAssignmentChanged: (callback) => ipcRenderer.on('active_assignment_changed', (e, data) => callback(data)),
+        onAssignmentReturned: (callback) => ipcRenderer.on('assignment_returned', (e, data) => callback(data)),
+        onAssignmentTimeUp: (callback) => ipcRenderer.on('assignment_time_up', (e, data) => callback(data))
     },
     connection: {
         onServerConnectionChanged: (callback) => ipcRenderer.on('server_connection_changed', (e, data) => callback(data))

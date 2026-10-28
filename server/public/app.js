@@ -69,11 +69,32 @@ function setupSocketListeners() {
         if (document.getElementById('modal-submissions').classList.contains('show')) {
             refreshCurrentSubmissions();
         }
+        if (currentMatrixAssignmentId && document.getElementById('modal-progress-matrix').classList.contains('show')) {
+            refreshProgressMatrix();
+        }
+    });
+
+    socket.on('assignment_progress_updated', () => {
+        if (currentMatrixAssignmentId && document.getElementById('modal-progress-matrix').classList.contains('show')) {
+            refreshProgressMatrix();
+        }
+    });
+
+    socket.on('submission_graded', () => {
+        if (viewingAssignmentId && document.getElementById('modal-submissions').classList.contains('show')) {
+            refreshCurrentSubmissions();
+        }
+        if (currentMatrixAssignmentId && document.getElementById('modal-progress-matrix').classList.contains('show')) {
+            refreshProgressMatrix();
+        }
     });
 
     socket.on('active_assignment_updated', () => {
         if (document.getElementById('modal-assignments').classList.contains('show')) {
             fetchAssignments();
+        }
+        if (currentMatrixAssignmentId && document.getElementById('modal-progress-matrix').classList.contains('show')) {
+            refreshProgressMatrix();
         }
     });
 
@@ -1456,6 +1477,16 @@ function toggleAssignmentForm(show) {
     }
 }
 
+function toggleCustomDuration(val) {
+    const customInput = document.getElementById('assign-duration-custom');
+    if (!customInput) return;
+    customInput.style.display = val === 'custom' ? 'inline-block' : 'none';
+    if (val === 'custom') customInput.focus();
+}
+
+let currentMatrixAssignmentId = null;
+let currentPreviewSubmission = null;
+
 async function fetchAssignments() {
     try {
         const res = await authFetch('/api/assignments');
@@ -1493,10 +1524,13 @@ function renderAssignmentsCards() {
                             ${isActive ? '<span class="badge-active-pulse">● ASIGNADA EN SALA</span>' : ''}
                             <span>${escapeHtml(a.title)}</span>
                         </h4>
-                        <div class="assignment-meta-row" style="margin-top:4px;">
+                        <div class="assignment-meta-row" style="margin-top:4px; display:flex; flex-wrap:wrap; gap:8px;">
                             <span>🏫 <strong>${escapeHtml(a.course_name)}</strong></span>
                             <span>💻 ${appLabel}</span>
                             <span>${modeLabel}</span>
+                            ${a.duration_minutes > 0 ? `<span class="badge" style="background:#2563eb; color:white; font-size:0.75rem;">⏳ ${a.duration_minutes} min</span>` : ''}
+                            ${a.strict_mode ? `<span class="badge" style="background:#dc2626; color:white; font-size:0.75rem;">🔒 Modo Enfoque</span>` : ''}
+                            ${a.template_filename ? `<span class="badge" style="background:#059669; color:white; font-size:0.75rem;">📁 Plantilla</span>` : ''}
                             ${a.folder_name ? `<span>📁 ${escapeHtml(a.folder_name)}</span>` : ''}
                         </div>
                     </div>
@@ -1519,9 +1553,15 @@ function renderAssignmentsCards() {
                             </button>
                         `}
                     </div>
-                    <div style="display:flex; gap:6px;">
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button class="btn btn-sm btn-secondary" onclick="openProgressMatrix(${a.id}, '${escapeHtml(a.title)}', '${escapeHtml(a.course_name)}')">
+                            📊 Matriz en Vivo
+                        </button>
                         <button class="btn btn-sm btn-secondary" onclick="viewSubmissions(${a.id}, '${escapeHtml(a.title)}', '${escapeHtml(a.course_name)}', '${escapeHtml(a.teacher_name)}')">
                             📥 Entregas (${a.submission_count || 0})
+                        </button>
+                        <button class="btn btn-sm btn-success" onclick="exportGradesExcel(${a.id})" title="Exportar Notas a Excel">
+                            📗 Excel
                         </button>
                     </div>
                 </div>
@@ -1545,19 +1585,38 @@ async function saveAssignment() {
         return;
     }
 
-    const payload = { folder_id, course_id, title, instructions, app_type, is_group, max_group_size };
+    let duration = document.getElementById('assign-duration').value;
+    if (duration === 'custom') {
+        duration = document.getElementById('assign-duration-custom').value || 0;
+    }
+    const strict_mode = document.getElementById('assign-strict-check').checked ? 1 : 0;
+
+    const formData = new FormData();
+    formData.append('title', title);
+    formData.append('course_id', course_id);
+    if (folder_id) formData.append('folder_id', folder_id);
+    formData.append('app_type', app_type);
+    formData.append('is_group', is_group ? 1 : 0);
+    formData.append('max_group_size', max_group_size);
+    formData.append('instructions', instructions);
+    formData.append('duration_minutes', parseInt(duration, 10) || 0);
+    formData.append('strict_mode', strict_mode);
+
+    const fileInput = document.getElementById('assign-template-file');
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+        formData.append('template_file', fileInput.files[0]);
+    }
 
     try {
         const url = id ? `/api/assignments/${id}` : '/api/assignments';
         const method = id ? 'PUT' : 'POST';
         const res = await authFetch(url, {
             method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: formData
         });
 
         if (res.ok) {
-            showNotification(id ? 'Tarea actualizada.' : 'Tarea creada correctamente.');
+            showNotification(id ? 'Tarea actualizada.' : 'Tarea creada correctamente con opciones Pro.');
             toggleAssignmentForm(false);
             fetchAssignments();
         } else {
@@ -1586,7 +1645,7 @@ async function activateAssignment(id) {
     try {
         const res = await authFetch(`/api/assignments/${id}/activate`, { method: 'POST' });
         if (res.ok) {
-            showNotification('🚀 Tarea asignada en la sala. Los alumnos ya pueden verla.');
+            showNotification('🚀 Tarea asignada en la sala con temporizador sincronizado.');
             fetchAssignments();
         }
     } catch(err) {
@@ -1604,6 +1663,118 @@ async function deactivateAssignment(id) {
     } catch(err) {
         console.error('Error cerrando asignación:', err);
     }
+}
+
+// ==========================================
+// MATRIZ Y SEMÁFORO DE AVANCE EN VIVO
+// ==========================================
+async function openProgressMatrix(assignmentId, title, course) {
+    currentMatrixAssignmentId = assignmentId;
+    document.getElementById('matrix-modal-title').textContent = `📊 Matriz en Vivo: ${title || 'Tarea'}`;
+    openModal('modal-progress-matrix');
+    await refreshProgressMatrix();
+}
+
+async function refreshProgressMatrix() {
+    if (!currentMatrixAssignmentId) return;
+    try {
+        const res = await authFetch(`/api/assignments/${currentMatrixAssignmentId}/progress-matrix`);
+        if (!res.ok) return;
+        const data = await res.json();
+        renderProgressMatrixData(data);
+    } catch(err) {
+        console.error('Error actualizando matriz de avance:', err);
+    }
+}
+
+function renderProgressMatrixData(data) {
+    const { assignment, summary, students } = data;
+
+    // Resumen
+    document.getElementById('matrix-total-count').textContent = summary.total || 0;
+    document.getElementById('matrix-notstarted-count').textContent = summary.not_started || 0;
+    document.getElementById('matrix-working-count').textContent = summary.working || 0;
+    document.getElementById('matrix-submitted-count').textContent = (summary.submitted || 0) + (summary.graded || 0);
+    document.getElementById('matrix-returned-count').textContent = summary.returned || 0;
+
+    const percent = summary.percent_completed || 0;
+    document.getElementById('matrix-percent-label').textContent = `${percent}%`;
+    document.getElementById('matrix-progress-bar').style.width = `${percent}%`;
+
+    const activeTag = document.getElementById('matrix-active-tag');
+    if (activeTag) {
+        activeTag.style.display = assignment.status === 'active' ? 'inline-block' : 'none';
+    }
+
+    // Grid de Estudiantes
+    const grid = document.getElementById('matrix-grid-container');
+    if (!grid) return;
+
+    if (!students || students.length === 0) {
+        grid.innerHTML = '<p class="text-center" style="grid-column:1/-1; color:var(--text-muted); padding:30px;">No hay alumnos registrados en la nómina de este curso.</p>';
+        return;
+    }
+
+    grid.innerHTML = students.map(s => {
+        let statusBadge = '';
+        let borderColor = 'rgba(255,255,255,0.08)';
+        let bgCard = 'rgba(15, 23, 42, 0.6)';
+        let extraInfo = '';
+
+        if (s.status === 'graded') {
+            statusBadge = `<span class="badge" style="background:#10b981; color:white;">🟢 Calificado (${s.submission?.grade || 'OK'})</span>`;
+            borderColor = '#10b981';
+            bgCard = 'rgba(16, 185, 129, 0.12)';
+        } else if (s.status === 'submitted') {
+            statusBadge = `<span class="badge" style="background:#10b981; color:white;">🟢 Entregado</span>`;
+            borderColor = '#10b981';
+            bgCard = 'rgba(16, 185, 129, 0.08)';
+        } else if (s.status === 'returned') {
+            statusBadge = `<span class="badge" style="background:#ea580c; color:white;">🟠 En Corrección</span>`;
+            borderColor = '#ea580c';
+            bgCard = 'rgba(234, 88, 12, 0.12)';
+        } else if (s.status === 'working') {
+            statusBadge = `<span class="badge" style="background:#ca8a04; color:white;">🟡 Trabajando</span>`;
+            borderColor = '#ca8a04';
+            bgCard = 'rgba(202, 138, 4, 0.12)';
+        } else {
+            statusBadge = `<span class="badge" style="background:#475569; color:#cbd5e1;">⚪ Sin Iniciar</span>`;
+        }
+
+        if (s.client_name) {
+            extraInfo += `<small style="display:block; color:#94a3b8; margin-top:4px;">💻 PC: ${escapeHtml(s.client_name)}</small>`;
+        }
+        if (s.metrics) {
+            if (s.metrics.words !== undefined) extraInfo += `<small style="display:block; color:#60a5fa;">📝 ${s.metrics.words} palabras</small>`;
+            if (s.metrics.cells !== undefined) extraInfo += `<small style="display:block; color:#60a5fa;">📊 ${s.metrics.cells} celdas</small>`;
+            if (s.metrics.slidesCount !== undefined) extraInfo += `<small style="display:block; color:#60a5fa;">📽️ ${s.metrics.slidesCount} diapositivas</small>`;
+        }
+
+        return `
+            <div style="background:${bgCard}; border:1px solid ${borderColor}; border-radius:8px; padding:10px 12px; display:flex; flex-direction:column; justify-content:space-between;">
+                <div>
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:6px;">
+                        <strong style="font-size:0.9rem; color:#f8fafc;">${escapeHtml(s.full_name)}</strong>
+                        ${statusBadge}
+                    </div>
+                    ${s.identifier ? `<small style="color:#64748b; font-size:0.75rem;">ID: ${escapeHtml(s.identifier)}</small>` : ''}
+                    ${extraInfo}
+                </div>
+                ${s.submission ? `
+                    <div style="margin-top:8px; display:flex; justify-content:flex-end; gap:6px;">
+                        <button class="btn btn-sm btn-primary" onclick="previewSubmissionObject(${JSON.stringify(s.submission).replace(/"/g, '&quot;')})">
+                            👁️ Ver / Calificar
+                        </button>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+function exportGradesExcel(assignmentId) {
+    if (!assignmentId) return;
+    window.location.href = `/api/assignments/${assignmentId}/export-grades`;
 }
 
 // ==========================================
@@ -1647,16 +1818,25 @@ function renderSubmissionsTable(submissions) {
 
         const dateStr = s.created_at ? new Date(s.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Hoy';
 
+        let statusBadge = '<span class="badge" style="background:#10b981; color:white;">Entregado</span>';
+        if (s.status === 'graded') {
+            statusBadge = '<span class="badge" style="background:#059669; color:white;">Calificado</span>';
+        } else if (s.status === 'returned') {
+            statusBadge = '<span class="badge" style="background:#ea580c; color:white;">Devuelto</span>';
+        }
+
+        const gradeDisplay = s.grade ? `<strong style="color:#60a5fa; font-size:1rem;">${escapeHtml(s.grade)}</strong>` : '<span style="color:var(--text-muted);">-</span>';
+
         return `
             <tr>
                 <td><small>${dateStr}</small></td>
                 <td>${studentText}</td>
                 <td><small>${escapeHtml(s.client_name || s.client_id)}</small></td>
-                <td><span class="badge">${escapeHtml(s.app_type || 'Doc')}</span></td>
+                <td>${statusBadge}</td>
+                <td>${gradeDisplay}</td>
                 <td><small>${escapeHtml(s.filename)}</small></td>
-                <td><small style="color:var(--text-muted);">${escapeHtml(s.notes || '-')}</small></td>
                 <td>
-                    <button class="btn btn-sm btn-primary" onclick="previewSubmission('${s.file_path}', '${escapeHtml(s.filename)}')">👁️ Ver</button>
+                    <button class="btn btn-sm btn-primary" onclick="previewSubmissionObject(${JSON.stringify(s).replace(/"/g, '&quot;')})">👁️ Ver/Calificar</button>
                     <a href="${s.file_path}" class="btn btn-sm btn-secondary" download="${escapeHtml(s.filename)}">⬇️</a>
                     <button class="btn btn-sm btn-danger" onclick="deleteSubmissionRecord(${s.id})">🗑️</button>
                 </td>
@@ -1670,25 +1850,32 @@ function downloadAllSubmissionsZip() {
     window.location.href = `/api/assignments/${viewingAssignmentId}/download-all`;
 }
 
-function previewSubmission(fileUrl, filename) {
+function previewSubmissionObject(submission) {
+    currentPreviewSubmission = submission;
     const frame = document.getElementById('preview-iframe');
     const pre = document.getElementById('preview-text');
     const titleEl = document.getElementById('preview-title');
     const downloadBtn = document.getElementById('preview-download-btn');
 
-    titleEl.textContent = `👁️ ${filename}`;
-    downloadBtn.href = fileUrl;
-    downloadBtn.download = filename;
+    titleEl.textContent = `👁️ ${submission.filename} - ${submission.main_student_name || 'Estudiante'}`;
+    downloadBtn.href = submission.file_path;
+    downloadBtn.download = submission.filename;
 
-    if (filename.endsWith('.html') || filename.endsWith('.htm')) {
+    // Cargar nota y feedback previos
+    const gradeInput = document.getElementById('preview-grade-input');
+    const feedbackInput = document.getElementById('preview-feedback-input');
+    if (gradeInput) gradeInput.value = submission.grade || '';
+    if (feedbackInput) feedbackInput.value = submission.feedback || '';
+
+    if (submission.filename.endsWith('.html') || submission.filename.endsWith('.htm')) {
         frame.style.display = 'block';
         pre.style.display = 'none';
-        frame.src = fileUrl;
+        frame.src = submission.file_path;
     } else {
         frame.style.display = 'none';
         pre.style.display = 'block';
         pre.textContent = 'Cargando contenido...';
-        fetch(fileUrl)
+        fetch(submission.file_path)
             .then(res => res.text())
             .then(txt => {
                 try {
@@ -1698,12 +1885,62 @@ function previewSubmission(fileUrl, filename) {
                     pre.textContent = txt;
                 }
             })
-            .catch(err => {
+            .catch(() => {
                 pre.textContent = 'No se pudo previsualizar el archivo.';
             });
     }
 
     openModal('modal-preview');
+}
+
+async function savePreviewGrade() {
+    if (!currentPreviewSubmission) return;
+    const grade = document.getElementById('preview-grade-input').value.trim();
+    const feedback = document.getElementById('preview-feedback-input').value.trim();
+
+    try {
+        const res = await authFetch(`/api/submissions/${currentPreviewSubmission.id}/grade`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ grade, feedback })
+        });
+        if (res.ok) {
+            showNotification('✅ Calificación y retroalimentación guardadas con éxito.');
+            currentPreviewSubmission.grade = grade;
+            currentPreviewSubmission.feedback = feedback;
+            currentPreviewSubmission.status = 'graded';
+            if (viewingAssignmentId) refreshCurrentSubmissions();
+            if (currentMatrixAssignmentId) refreshProgressMatrix();
+        } else {
+            alert('Error al guardar calificación.');
+        }
+    } catch(err) {
+        console.error('Error calificando entrega:', err);
+    }
+}
+
+async function returnPreviewSubmission() {
+    if (!currentPreviewSubmission) return;
+    const feedback = document.getElementById('preview-feedback-input').value.trim();
+    if (!confirm('¿Deseas devolver esta entrega al alumno para que realice correcciones? Se le notificará instantáneamente.')) return;
+
+    try {
+        const res = await authFetch(`/api/submissions/${currentPreviewSubmission.id}/return`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ feedback })
+        });
+        if (res.ok) {
+            showNotification('↩️ Entrega devuelta al estudiante para su corrección.');
+            closeModal('modal-preview');
+            if (viewingAssignmentId) refreshCurrentSubmissions();
+            if (currentMatrixAssignmentId) refreshProgressMatrix();
+        } else {
+            alert('Error al devolver entrega.');
+        }
+    } catch(err) {
+        console.error('Error devolviendo entrega:', err);
+    }
 }
 
 async function deleteSubmissionRecord(id) {

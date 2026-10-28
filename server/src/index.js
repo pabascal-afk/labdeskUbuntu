@@ -20,8 +20,9 @@ const transferDir = path.join(uploadDir, 'transfers');
 const turnInDir = path.join(uploadDir, 'turn_ins');
 const brandingDir = path.join(uploadDir, 'branding');
 const submissionsDir = path.join(uploadDir, 'submissions');
+const templatesDir = path.join(uploadDir, 'templates');
 
-[uploadDir, transferDir, turnInDir, brandingDir, submissionsDir].forEach(dir => {
+[uploadDir, transferDir, turnInDir, brandingDir, submissionsDir, templatesDir].forEach(dir => {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
@@ -63,6 +64,16 @@ const submissionStorage = multer.diskStorage({
     }
 });
 const uploadSubmission = multer({ storage: submissionStorage });
+
+const templateStorage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, templatesDir),
+    filename: (req, file, cb) => {
+        const safeName = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+        cb(null, `${Date.now()}_${safeName}`);
+    }
+});
+const uploadTemplate = multer({ storage: templateStorage });
+
 const uploadRoster = multer({ storage: multer.memoryStorage() });
 
 const app = express();
@@ -255,6 +266,36 @@ io.on('connection', (socket) => {
 
     socket.on('fs_list_result', (data) => {
         io.emit('fs_list_result', data);
+    });
+
+    // Telemetría de avance de tareas por estudiantes en tiempo real
+    socket.on('student_task_activity', (data) => {
+        if (!data || !data.assignmentId || !data.studentId) return;
+        const { assignmentId, studentId, clientId, clientName, status, metrics } = data;
+        const metricsStr = metrics ? (typeof metrics === 'string' ? metrics : JSON.stringify(metrics)) : null;
+
+        db.run(`INSERT INTO assignment_progress (assignment_id, student_id, client_id, client_name, status, metrics_json, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+                ON CONFLICT(assignment_id, student_id) DO UPDATE SET
+                client_id = excluded.client_id,
+                client_name = excluded.client_name,
+                status = excluded.status,
+                metrics_json = excluded.metrics_json,
+                updated_at = datetime('now')`,
+            [assignmentId, studentId, clientId || null, clientName || null, status || 'working', metricsStr],
+            (err) => {
+                if (!err) {
+                    io.emit('assignment_progress_updated', {
+                        assignmentId,
+                        studentId,
+                        clientId,
+                        clientName,
+                        status: status || 'working',
+                        metrics
+                    });
+                }
+            }
+        );
     });
 });
 
@@ -985,6 +1026,9 @@ app.delete('/api/folders/:id', requireAuth(), (req, res) => {
     });
 });
 
+// Variable de temporizador de sala en memoria
+let activeAssignmentTimer = null;
+
 // Listar tareas
 app.get('/api/assignments', requireAuth(), (req, res) => {
     const userId = req.user.userId;
@@ -1009,17 +1053,37 @@ app.get('/api/assignments', requireAuth(), (req, res) => {
     });
 });
 
-// Crear tarea
-app.post('/api/assignments', requireAuth(), (req, res) => {
-    const { folder_id, course_id, title, instructions, app_type, is_group, max_group_size } = req.body;
+// Crear tarea (con plantilla opcional, temporizador y modo enfoque)
+app.post('/api/assignments', requireAuth(), uploadTemplate.single('template_file'), (req, res) => {
+    const { folder_id, course_id, title, instructions, app_type, is_group, max_group_size, duration_minutes, strict_mode, allow_auto_submit } = req.body;
     if (!title || !course_id) {
         return res.status(400).json({ error: 'Título y curso son obligatorios' });
     }
     const userId = req.user.userId || 1;
+    let templateFilePath = null;
+    let templateFilename = null;
+    if (req.file) {
+        templateFilePath = `/uploads/templates/${req.file.filename}`;
+        templateFilename = req.file.originalname;
+    }
 
-    db.run(`INSERT INTO assignments (user_id, folder_id, course_id, title, instructions, app_type, is_group, max_group_size, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft')`,
-        [userId, folder_id || null, course_id, title.trim(), instructions || '', app_type || 'any', is_group ? 1 : 0, max_group_size || 4],
+    db.run(`INSERT INTO assignments (user_id, folder_id, course_id, title, instructions, app_type, is_group, max_group_size, status, template_file_path, template_filename, duration_minutes, strict_mode, allow_auto_submit)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?)`,
+        [
+            userId,
+            folder_id || null,
+            course_id,
+            title.trim(),
+            instructions || '',
+            app_type || 'any',
+            is_group ? 1 : 0,
+            max_group_size || 4,
+            templateFilePath,
+            templateFilename,
+            parseInt(duration_minutes, 10) || 0,
+            strict_mode ? 1 : 0,
+            allow_auto_submit !== undefined ? (allow_auto_submit ? 1 : 0) : 1
+        ],
         function(err) {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ success: true, id: this.lastID });
@@ -1027,9 +1091,16 @@ app.post('/api/assignments', requireAuth(), (req, res) => {
     );
 });
 
-// Editar tarea
-app.put('/api/assignments/:id', requireAuth(), (req, res) => {
-    const { folder_id, course_id, title, instructions, app_type, is_group, max_group_size } = req.body;
+// Editar tarea (con actualización opcional de plantilla, temporizador y modo enfoque)
+app.put('/api/assignments/:id', requireAuth(), uploadTemplate.single('template_file'), (req, res) => {
+    const { folder_id, course_id, title, instructions, app_type, is_group, max_group_size, duration_minutes, strict_mode, allow_auto_submit } = req.body;
+    let templateFilePath = null;
+    let templateFilename = null;
+    if (req.file) {
+        templateFilePath = `/uploads/templates/${req.file.filename}`;
+        templateFilename = req.file.originalname;
+    }
+
     db.run(`UPDATE assignments SET
             folder_id = COALESCE(?, folder_id),
             course_id = COALESCE(?, course_id),
@@ -1037,9 +1108,28 @@ app.put('/api/assignments/:id', requireAuth(), (req, res) => {
             instructions = COALESCE(?, instructions),
             app_type = COALESCE(?, app_type),
             is_group = COALESCE(?, is_group),
-            max_group_size = COALESCE(?, max_group_size)
+            max_group_size = COALESCE(?, max_group_size),
+            duration_minutes = COALESCE(?, duration_minutes),
+            strict_mode = COALESCE(?, strict_mode),
+            allow_auto_submit = COALESCE(?, allow_auto_submit),
+            template_file_path = COALESCE(?, template_file_path),
+            template_filename = COALESCE(?, template_filename)
             WHERE id = ?`,
-        [folder_id, course_id, title, instructions, app_type, is_group !== undefined ? (is_group ? 1 : 0) : null, max_group_size, req.params.id],
+        [
+            folder_id,
+            course_id,
+            title,
+            instructions,
+            app_type,
+            is_group !== undefined ? (is_group ? 1 : 0) : null,
+            max_group_size,
+            duration_minutes !== undefined ? parseInt(duration_minutes, 10) : null,
+            strict_mode !== undefined ? (strict_mode ? 1 : 0) : null,
+            allow_auto_submit !== undefined ? (allow_auto_submit ? 1 : 0) : null,
+            templateFilePath,
+            templateFilename,
+            req.params.id
+        ],
         (err) => {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ success: true });
@@ -1064,6 +1154,14 @@ function getActiveAssignmentDetails(callback) {
             WHERE a.status = 'active'
             ORDER BY a.created_at DESC LIMIT 1`, [], (err, assignment) => {
         if (err || !assignment) return callback(err, null);
+
+        if (assignment.time_limit_end) {
+            const msRemaining = new Date(assignment.time_limit_end).getTime() - Date.now();
+            assignment.seconds_remaining = Math.max(0, Math.floor(msRemaining / 1000));
+        } else {
+            assignment.seconds_remaining = null;
+        }
+
         db.all("SELECT id, full_name, identifier FROM students WHERE course_id = ? ORDER BY full_name ASC",
             [assignment.course_id],
             (sErr, students) => {
@@ -1075,20 +1173,41 @@ function getActiveAssignmentDetails(callback) {
     });
 }
 
-// Activar tarea (Asignar a la sala en tiempo real)
+// Activar tarea (Asignar a la sala en tiempo real con temporizador sincronizado)
 app.post('/api/assignments/:id/activate', requireAuth(), (req, res) => {
     const assignId = req.params.id;
+    if (activeAssignmentTimer) {
+        clearTimeout(activeAssignmentTimer);
+        activeAssignmentTimer = null;
+    }
+
     // Cerrar cualquier tarea activa previa
-    db.run("UPDATE assignments SET status = 'closed' WHERE status = 'active'", (err) => {
+    db.run("UPDATE assignments SET status = 'closed', time_limit_end = NULL WHERE status = 'active'", (err) => {
         if (err) return res.status(500).json({ error: err.message });
-        // Marcar la nueva tarea como activa
-        db.run("UPDATE assignments SET status = 'active' WHERE id = ?", [assignId], (actErr) => {
-            if (actErr) return res.status(500).json({ error: actErr.message });
-            getActiveAssignmentDetails((detErr, activeData) => {
-                if (activeData) {
-                    io.emit('active_assignment_updated', activeData);
-                }
-                res.json({ success: true, assignment: activeData });
+
+        db.get("SELECT * FROM assignments WHERE id = ?", [assignId], (gErr, assignRow) => {
+            if (gErr || !assignRow) return res.status(404).json({ error: 'Tarea no encontrada' });
+
+            const duration = assignRow.duration_minutes || 0;
+            let timeLimitEnd = null;
+            if (duration > 0) {
+                timeLimitEnd = new Date(Date.now() + duration * 60 * 1000).toISOString();
+                // Programar fin de tiempo
+                activeAssignmentTimer = setTimeout(() => {
+                    io.emit('assignment_time_up', { assignmentId: assignId });
+                    activeAssignmentTimer = null;
+                }, duration * 60 * 1000);
+            }
+
+            // Marcar la nueva tarea como activa
+            db.run("UPDATE assignments SET status = 'active', time_limit_end = ? WHERE id = ?", [timeLimitEnd, assignId], (actErr) => {
+                if (actErr) return res.status(500).json({ error: actErr.message });
+                getActiveAssignmentDetails((detErr, activeData) => {
+                    if (activeData) {
+                        io.emit('active_assignment_updated', activeData);
+                    }
+                    res.json({ success: true, assignment: activeData });
+                });
             });
         });
     });
@@ -1096,7 +1215,11 @@ app.post('/api/assignments/:id/activate', requireAuth(), (req, res) => {
 
 // Desactivar tarea activa
 app.post('/api/assignments/:id/deactivate', requireAuth(), (req, res) => {
-    db.run("UPDATE assignments SET status = 'closed' WHERE id = ?", [req.params.id], (err) => {
+    if (activeAssignmentTimer) {
+        clearTimeout(activeAssignmentTimer);
+        activeAssignmentTimer = null;
+    }
+    db.run("UPDATE assignments SET status = 'closed', time_limit_end = NULL WHERE id = ?", [req.params.id], (err) => {
         if (err) return res.status(500).json({ error: err.message });
         io.emit('active_assignment_updated', null);
         res.json({ success: true });
@@ -1109,6 +1232,104 @@ app.get('/api/assignments/active', (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!activeData) return res.json({ active: false });
         res.json({ active: true, assignment: activeData });
+    });
+});
+
+// Matriz de avance y semáforo en tiempo real de una tarea
+app.get('/api/assignments/:id/progress-matrix', requireAuth(), (req, res) => {
+    const assignId = req.params.id;
+    db.get(`SELECT a.*, c.name as course_name FROM assignments a JOIN courses c ON a.course_id = c.id WHERE a.id = ?`, [assignId], (aErr, assignment) => {
+        if (aErr || !assignment) return res.status(404).json({ error: 'Tarea no encontrada' });
+
+        db.all("SELECT id, full_name, identifier FROM students WHERE course_id = ? ORDER BY full_name ASC", [assignment.course_id], (sErr, students) => {
+            if (sErr) return res.status(500).json({ error: sErr.message });
+
+            db.all("SELECT * FROM assignment_progress WHERE assignment_id = ?", [assignId], (pErr, progressRows) => {
+                if (pErr) return res.status(500).json({ error: pErr.message });
+
+                db.all("SELECT * FROM submissions WHERE assignment_id = ? ORDER BY created_at DESC", [assignId], (subErr, submissions) => {
+                    if (subErr) return res.status(500).json({ error: subErr.message });
+
+                    const progressMap = new Map();
+                    (progressRows || []).forEach(p => progressMap.set(p.student_id, p));
+
+                    const summary = {
+                        total: students.length,
+                        not_started: 0,
+                        working: 0,
+                        submitted: 0,
+                        graded: 0,
+                        returned: 0,
+                        percent_completed: 0
+                    };
+
+                    const matrix = (students || []).map(student => {
+                        // Buscar si tiene entrega
+                        const sub = (submissions || []).find(s => {
+                            if (s.main_student_name === student.full_name) return true;
+                            try {
+                                const names = JSON.parse(s.student_names);
+                                if (Array.isArray(names) && names.includes(student.full_name)) return true;
+                            } catch(e) {}
+                            return false;
+                        });
+
+                        const prog = progressMap.get(student.id);
+
+                        let status = 'not_started';
+                        let clientName = prog ? prog.client_name : null;
+                        let metrics = null;
+                        if (prog && prog.metrics_json) {
+                            try { metrics = JSON.parse(prog.metrics_json); } catch(e) { metrics = prog.metrics_json; }
+                        }
+
+                        if (sub) {
+                            if (sub.status === 'returned') {
+                                status = 'returned';
+                            } else if (sub.status === 'graded') {
+                                status = 'graded';
+                            } else {
+                                status = 'submitted';
+                            }
+                            clientName = sub.client_name || clientName;
+                        } else if (prog && prog.status === 'working') {
+                            status = 'working';
+                        }
+
+                        summary[status] = (summary[status] || 0) + 1;
+
+                        return {
+                            id: student.id,
+                            full_name: student.full_name,
+                            identifier: student.identifier,
+                            status,
+                            client_name: clientName,
+                            metrics,
+                            submission: sub ? {
+                                id: sub.id,
+                                filename: sub.filename,
+                                file_path: sub.file_path,
+                                app_type: sub.app_type,
+                                grade: sub.grade,
+                                feedback: sub.feedback,
+                                status: sub.status,
+                                return_count: sub.return_count,
+                                created_at: sub.created_at
+                            } : null
+                        };
+                    });
+
+                    const completedCount = (summary.submitted || 0) + (summary.graded || 0);
+                    summary.percent_completed = summary.total > 0 ? Math.round((completedCount / summary.total) * 100) : 0;
+
+                    res.json({
+                        assignment,
+                        summary,
+                        students: matrix
+                    });
+                });
+            });
+        });
     });
 });
 
@@ -1133,8 +1354,8 @@ app.post('/api/assignments/:id/turn-in', uploadSubmission.single('file'), (req, 
     const mainStudent = mainStudentName || (parsedStudentNames.length > 0 ? parsedStudentNames[0] : 'Estudiante');
     const filePath = `/uploads/submissions/${assignmentId}/${req.file.filename}`;
 
-    db.run(`INSERT INTO submissions (assignment_id, client_id, client_name, course_name, student_names, main_student_name, app_type, filename, file_path, file_size, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    db.run(`INSERT INTO submissions (assignment_id, client_id, client_name, course_name, student_names, main_student_name, app_type, filename, file_path, file_size, notes, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted')`,
         [
             assignmentId,
             clientId || 'station',
@@ -1162,10 +1383,33 @@ app.post('/api/assignments/:id/turn-in', uploadSubmission.single('file'), (req, 
                 filename: req.file.originalname,
                 file_path: filePath,
                 url: filePath,
+                status: 'submitted',
                 created_at: new Date().toISOString()
             };
+
+            // Actualizar progreso a 'submitted' para los estudiantes del grupo
+            db.all("SELECT id, full_name FROM students WHERE course_id = (SELECT course_id FROM assignments WHERE id = ?)", [assignmentId], (stErr, allStudents) => {
+                if (!stErr && allStudents) {
+                    const matchedStudents = allStudents.filter(s => {
+                        return s.full_name === mainStudent || parsedStudentNames.includes(s.full_name);
+                    });
+                    matchedStudents.forEach(st => {
+                        db.run(`INSERT INTO assignment_progress (assignment_id, student_id, client_id, client_name, status, updated_at)
+                                VALUES (?, ?, ?, ?, 'submitted', datetime('now'))
+                                ON CONFLICT(assignment_id, student_id) DO UPDATE SET
+                                client_id = excluded.client_id,
+                                client_name = excluded.client_name,
+                                status = 'submitted',
+                                updated_at = datetime('now')`,
+                            [assignmentId, st.id, clientId, clientName]
+                        );
+                    });
+                }
+            });
+
             io.emit('new_submission', submissionItem);
             io.emit('new_turn_in', submissionItem);
+            io.emit('assignment_progress_updated', { assignmentId, status: 'submitted' });
             res.json({ success: true, submission: submissionItem });
         }
     );
@@ -1180,6 +1424,170 @@ app.get('/api/assignments/:id/submissions', (req, res) => {
             return r;
         });
         res.json(formatted);
+    });
+});
+
+// Calificar entrega
+app.post('/api/submissions/:id/grade', requireAuth(), (req, res) => {
+    const { grade, feedback } = req.body;
+    const submissionId = req.params.id;
+
+    db.run("UPDATE submissions SET grade = ?, feedback = ?, status = 'graded' WHERE id = ?",
+        [grade !== undefined ? String(grade).trim() : null, feedback || '', submissionId],
+        function(err) {
+            if (err) return res.status(500).json({ error: err.message });
+
+            db.get("SELECT * FROM submissions WHERE id = ?", [submissionId], (sErr, sub) => {
+                if (sub) {
+                    io.emit('submission_graded', { submissionId, grade, feedback, assignmentId: sub.assignment_id });
+                    db.run("UPDATE assignment_progress SET status = 'graded' WHERE assignment_id = ? AND student_id IN (SELECT id FROM students WHERE full_name = ?)",
+                        [sub.assignment_id, sub.main_student_name]
+                    );
+                }
+                res.json({ success: true, grade, feedback });
+            });
+        }
+    );
+});
+
+// Devolver entrega para corregir
+app.post('/api/submissions/:id/return', requireAuth(), (req, res) => {
+    const { feedback } = req.body;
+    const submissionId = req.params.id;
+
+    db.run("UPDATE submissions SET feedback = ?, status = 'returned', return_count = COALESCE(return_count, 0) + 1 WHERE id = ?",
+        [feedback || 'Por favor revisa y corrige las observaciones indicadas por el profesor.', submissionId],
+        function(err) {
+            if (err) return res.status(500).json({ error: err.message });
+
+            db.get("SELECT * FROM submissions WHERE id = ?", [submissionId], (sErr, sub) => {
+                if (!sub) return res.status(404).json({ error: 'Entrega no encontrada' });
+
+                // Actualizar status a 'returned' en assignment_progress
+                db.run("UPDATE assignment_progress SET status = 'returned' WHERE assignment_id = ? AND student_id IN (SELECT id FROM students WHERE full_name = ?)",
+                    [sub.assignment_id, sub.main_student_name]
+                );
+
+                const returnData = {
+                    submissionId: sub.id,
+                    assignmentId: sub.assignment_id,
+                    clientId: sub.client_id,
+                    clientName: sub.client_name,
+                    mainStudentName: sub.main_student_name,
+                    studentNames: sub.student_names,
+                    appType: sub.app_type,
+                    filename: sub.filename,
+                    filePath: sub.file_path,
+                    url: sub.file_path,
+                    feedback: feedback || sub.feedback,
+                    returnedAt: new Date().toISOString()
+                };
+
+                // Emitir por WebSocket a todas las estaciones
+                io.emit('assignment_returned', returnData);
+                io.emit('assignment_progress_updated', { assignmentId: sub.assignment_id, status: 'returned' });
+
+                res.json({ success: true, submission: returnData });
+            });
+        }
+    );
+});
+
+// Exportar libro de calificaciones y entregas a Excel (.xlsx)
+app.get('/api/assignments/:id/export-grades', requireAuth(), (req, res) => {
+    const assignId = req.params.id;
+    db.get(`SELECT a.*, c.name as course_name, u.full_name as teacher_name 
+            FROM assignments a 
+            JOIN courses c ON a.course_id = c.id 
+            JOIN users u ON a.user_id = u.id 
+            WHERE a.id = ?`, [assignId], (aErr, assignment) => {
+        if (aErr || !assignment) return res.status(404).json({ error: 'Tarea no encontrada' });
+
+        db.all("SELECT id, full_name, identifier FROM students WHERE course_id = ? ORDER BY full_name ASC", [assignment.course_id], (sErr, students) => {
+            if (sErr) return res.status(500).json({ error: sErr.message });
+
+            db.all("SELECT * FROM submissions WHERE assignment_id = ? ORDER BY created_at ASC", [assignId], (subErr, submissions) => {
+                if (subErr) return res.status(500).json({ error: subErr.message });
+
+                const rows = (students || []).map((student, idx) => {
+                    const sub = (submissions || []).find(s => {
+                        if (s.main_student_name === student.full_name) return true;
+                        try {
+                            const names = JSON.parse(s.student_names);
+                            if (Array.isArray(names) && names.includes(student.full_name)) return true;
+                        } catch(e) {}
+                        return false;
+                    });
+
+                    let estado = 'Sin Iniciar';
+                    let fecha = '';
+                    let nota = '';
+                    let feedback = '';
+                    let grupo = 'Individual';
+                    let pc = '';
+                    let archivo = '';
+
+                    if (sub) {
+                        pc = sub.client_name || '';
+                        archivo = sub.filename || '';
+                        fecha = sub.created_at || '';
+                        nota = sub.grade || '';
+                        feedback = sub.feedback || '';
+
+                        if (sub.status === 'graded') estado = 'Calificado';
+                        else if (sub.status === 'returned') estado = 'Devuelto para Corregir';
+                        else estado = 'Entregado';
+
+                        try {
+                            const parsedNames = JSON.parse(sub.student_names);
+                            if (Array.isArray(parsedNames) && parsedNames.length > 1) {
+                                grupo = parsedNames.join(', ');
+                            }
+                        } catch(e) {}
+                    }
+
+                    return {
+                        'N°': idx + 1,
+                        'RUT / ID': student.identifier || '',
+                        'Nombre del Estudiante': student.full_name,
+                        'Curso': assignment.course_name,
+                        'Estado': estado,
+                        'Nota': nota,
+                        'Retroalimentación': feedback,
+                        'Fecha de Entrega': fecha,
+                        'Grupo': grupo,
+                        'Estación': pc,
+                        'Archivo': archivo
+                    };
+                });
+
+                const wb = xlsx.utils.book_new();
+                const ws = xlsx.utils.json_to_sheet(rows);
+
+                // Auto-ancho de columnas
+                ws['!cols'] = [
+                    { wch: 6 },  // N°
+                    { wch: 15 }, // RUT
+                    { wch: 32 }, // Nombre
+                    { wch: 15 }, // Curso
+                    { wch: 22 }, // Estado
+                    { wch: 10 }, // Nota
+                    { wch: 45 }, // Retroalimentación
+                    { wch: 22 }, // Fecha
+                    { wch: 35 }, // Grupo
+                    { wch: 16 }, // Estación
+                    { wch: 30 }  // Archivo
+                ];
+
+                xlsx.utils.book_append_sheet(wb, ws, "Calificaciones");
+                const buffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+                const safeTitle = (assignment.title || 'Tarea').replace(/[^a-zA-Z0-9_\-]/g, '_');
+                res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                res.set('Content-Disposition', `attachment; filename="Calificaciones_${safeTitle}.xlsx"`);
+                res.send(buffer);
+            });
+        });
     });
 });
 

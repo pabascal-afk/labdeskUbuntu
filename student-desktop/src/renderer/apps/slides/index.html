@@ -1064,26 +1064,53 @@
             reader.readAsText(file);
         }
 
+        function loadSlidesFromData(data) {
+            if (!data) return;
+            if (data.slides && Array.isArray(data.slides)) {
+                slides = data.slides;
+                if (data.title) document.getElementById('pres-title').value = data.title;
+                loadSlide(0);
+            }
+        }
+
+        const slidesTurnInConfig = {
+            appType: 'Mini Slides',
+            getFilename: (studentName) => {
+                const title = document.getElementById('pres-title').value.trim() || 'presentacion';
+                return `${title.replace(/[^a-zA-Z0-9_\-]/g, '_')}_${studentName.replace(/[^a-zA-Z0-9_\-]/g, '_')}.slides.json`;
+            },
+            getContent: () => {
+                saveActiveSlideFromDOM();
+                const title = document.getElementById('pres-title').value.trim() || 'presentacion';
+                return JSON.stringify({
+                    title,
+                    timestamp: new Date().toISOString(),
+                    slidesCount: slides.length,
+                    slides
+                }, null, 2);
+            },
+            setContent: (raw) => {
+                try {
+                    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                    loadSlidesFromData(parsed);
+                } catch(e) {
+                    console.error('Error cargando plantilla de diapositivas:', e);
+                }
+            },
+            getMetrics: () => ({
+                slidesCount: slides.length
+            })
+        };
+
+        if (typeof LabDeskTurnIn !== 'undefined' && LabDeskTurnIn.registerApp) {
+            LabDeskTurnIn.registerApp(slidesTurnInConfig);
+        }
+
         // ENTREGAR AL PROFESOR
         function turnInSlides() {
             saveActiveSlideFromDOM();
             if (typeof LabDeskTurnIn !== 'undefined') {
-                LabDeskTurnIn.open({
-                    appType: 'Mini Slides',
-                    getFilename: (studentName) => {
-                        const title = document.getElementById('pres-title').value.trim() || 'presentacion';
-                        return `${title.replace(/[^a-zA-Z0-9_\-]/g, '_')}_${studentName.replace(/[^a-zA-Z0-9_\-]/g, '_')}.slides.json`;
-                    },
-                    getContent: () => {
-                        const title = document.getElementById('pres-title').value.trim() || 'presentacion';
-                        return JSON.stringify({
-                            title,
-                            timestamp: new Date().toISOString(),
-                            slidesCount: slides.length,
-                            slides
-                        }, null, 2);
-                    }
-                });
+                LabDeskTurnIn.open(slidesTurnInConfig);
             } else {
                 alert('Módulo de entregas no disponible');
             }
