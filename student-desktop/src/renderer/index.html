@@ -128,6 +128,26 @@
         <!-- CONTENEDOR DE VENTANAS FLOTANTES -->
         <div id="windows-container" class="windows-container"></div>
 
+        <!-- BANNER / TARJETA DE TAREA ASIGNADA ACTIVA -->
+        <div id="active-assignment-card" class="active-assignment-card" style="display:none;">
+            <div class="assignment-card-header">
+                <span class="assignment-badge">📋 TAREA ASIGNADA EN LA SALA</span>
+                <button class="btn-minimize-assignment" onclick="toggleAssignmentCollapse()" title="Minimizar / Expandir">_</button>
+            </div>
+            <div class="assignment-card-content" id="assignment-card-content">
+                <h3 id="assignment-card-title">Título de la Tarea</h3>
+                <p class="assignment-card-meta">
+                    <span id="assignment-card-teacher">👨‍🏫 Profesor</span> • 
+                    <span id="assignment-card-course">🏫 Curso</span> • 
+                    <span id="assignment-card-mode">👥 Modo</span>
+                </p>
+                <p class="assignment-card-desc" id="assignment-card-instructions">Instrucciones...</p>
+                <div class="assignment-card-actions">
+                    <button class="btn-assignment-open" id="btn-assignment-open-app" onclick="openAssignmentApp()">🚀 Abrir Editor Requerido</button>
+                </div>
+            </div>
+        </div>
+
         <!-- VISOR CAUTIVO DE EXAMEN (MODO PÁGINA CAUTIVA) -->
         <div id="captive-exam-overlay" class="captive-exam-overlay">
             <div class="captive-top-bar">

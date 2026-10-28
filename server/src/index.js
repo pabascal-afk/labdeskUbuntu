@@ -7,6 +7,8 @@ const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
 const crypto = require('crypto');
+const xlsx = require('xlsx');
+const AdmZip = require('adm-zip');
 const db = require('./db');
 
 const PORT = process.env.PORT || 3000;
@@ -17,8 +19,9 @@ const uploadDir = path.join(__dirname, '..', 'public', 'uploads');
 const transferDir = path.join(uploadDir, 'transfers');
 const turnInDir = path.join(uploadDir, 'turn_ins');
 const brandingDir = path.join(uploadDir, 'branding');
+const submissionsDir = path.join(uploadDir, 'submissions');
 
-[uploadDir, transferDir, turnInDir, brandingDir].forEach(dir => {
+[uploadDir, transferDir, turnInDir, brandingDir, submissionsDir].forEach(dir => {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
@@ -47,6 +50,21 @@ const turnInStorage = multer.diskStorage({
 });
 const uploadTurnIn = multer({ storage: turnInStorage });
 
+const submissionStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const assignId = req.params.id || 'general';
+        const targetDir = path.join(submissionsDir, String(assignId));
+        if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+        cb(null, targetDir);
+    },
+    filename: (req, file, cb) => {
+        const safeName = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+        cb(null, `${Date.now()}_${safeName}`);
+    }
+});
+const uploadSubmission = multer({ storage: submissionStorage });
+const uploadRoster = multer({ storage: multer.memoryStorage() });
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -60,13 +78,40 @@ app.get(['/profesor', '/botonera'], (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'public', 'botonera.html'));
 });
 
-// Middleware simple de autenticación / roles
+// Sesiones activas de usuarios (token -> { userId, username, fullName, role, loginTime })
+const activeSessions = new Map();
+
+// Middleware de autenticación / roles por Token
 app.use((req, res, next) => {
-    // Si viene de localhost o con token de profesor
+    const authHeader = req.headers['authorization'] || req.headers['x-auth-token'];
+    let token = null;
+    if (authHeader) {
+        token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader.trim();
+    }
+    if (token && activeSessions.has(token)) {
+        req.user = activeSessions.get(token);
+        return next();
+    }
     const isLocalhost = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
-    req.user = { role: isLocalhost ? 'admin' : 'student' };
+    req.user = { userId: null, role: isLocalhost ? 'admin' : 'student', username: isLocalhost ? 'admin_local' : 'guest' };
     next();
 });
+
+function requireAuth(allowedRoles = []) {
+    return (req, res, next) => {
+        if (!req.user || !req.user.userId) {
+            // Permitir acceso localhost como administrador por compatibilidad
+            if (req.user && req.user.role === 'admin' && (allowedRoles.length === 0 || allowedRoles.includes('admin'))) {
+                return next();
+            }
+            return res.status(401).json({ error: 'Sesión no iniciada. Por favor identifícate como profesor o administrador.' });
+        }
+        if (allowedRoles.length > 0 && !allowedRoles.includes(req.user.role)) {
+            return res.status(403).json({ error: 'Permisos insuficientes para realizar esta acción.' });
+        }
+        next();
+    };
+}
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -469,7 +514,7 @@ app.get('/api/teacher/summary', (req, res) => {
     db.get(clientQuery, params, (err, stats) => {
         if (err) return res.status(500).json({ error: err.message });
         
-        db.get('SELECT COUNT(*) as turn_in_count FROM turn_ins', [], (err2, turnIns) => {
+        db.get('SELECT ((SELECT COUNT(*) FROM turn_ins) + (SELECT COUNT(*) FROM submissions)) as turn_in_count', [], (err2, turnIns) => {
             res.json({
                 total: stats ? (stats.total || 0) : 0,
                 online: stats ? (stats.online || 0) : 0,
@@ -636,6 +681,565 @@ app.delete('/api/turn-ins/:id', (req, res) => {
         }
         db.run(`DELETE FROM turn_ins WHERE id = ?`, [req.params.id], (err) => {
             if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true });
+        });
+    });
+});
+
+// ==========================================
+// AUTENTICACIÓN Y SESIONES
+// ==========================================
+app.post('/api/auth/login', (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
+
+    db.get("SELECT * FROM users WHERE LOWER(username) = LOWER(?)", [username.trim()], (err, user) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!user || !db.verifyPassword(password, user.password_hash)) {
+            return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
+        }
+        const token = crypto.randomBytes(32).toString('hex');
+        const sessionData = {
+            userId: user.id,
+            username: user.username,
+            fullName: user.full_name,
+            role: user.role
+        };
+        activeSessions.set(token, sessionData);
+        res.json({ success: true, token, user: sessionData });
+    });
+});
+
+app.get('/api/auth/me', (req, res) => {
+    if (!req.user || !req.user.userId) {
+        return res.status(401).json({ authenticated: false });
+    }
+    res.json({ authenticated: true, user: req.user });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+    const authHeader = req.headers['authorization'] || req.headers['x-auth-token'];
+    if (authHeader) {
+        const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader.trim();
+        activeSessions.delete(token);
+    }
+    res.json({ success: true });
+});
+
+// ==========================================
+// GESTIÓN DE USUARIOS (SOLO ADMINISTRADOR)
+// ==========================================
+app.get('/api/users', requireAuth(['admin']), (req, res) => {
+    db.all("SELECT id, username, full_name, role, created_at FROM users ORDER BY created_at ASC", [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+app.post('/api/users', requireAuth(['admin']), (req, res) => {
+    const { username, password, full_name, role } = req.body;
+    if (!username || !password || !full_name) {
+        return res.status(400).json({ error: 'Campos requeridos: username, password, full_name' });
+    }
+    const cleanUser = username.trim().toLowerCase();
+    const userRole = role === 'admin' ? 'admin' : 'teacher';
+    const passHash = db.hashPassword(password);
+
+    db.run("INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)",
+        [cleanUser, passHash, full_name.trim(), userRole],
+        function(err) {
+            if (err) {
+                if (err.message.includes('UNIQUE')) return res.status(400).json({ error: 'El nombre de usuario ya existe' });
+                return res.status(500).json({ error: err.message });
+            }
+            res.json({ success: true, id: this.lastID, username: cleanUser, full_name: full_name.trim(), role: userRole });
+        }
+    );
+});
+
+app.put('/api/users/:id', requireAuth(['admin']), (req, res) => {
+    const { full_name, role, password } = req.body;
+    const userId = Number(req.params.id);
+
+    if (password && password.trim().length > 0) {
+        const passHash = db.hashPassword(password.trim());
+        db.run("UPDATE users SET full_name = COALESCE(?, full_name), role = COALESCE(?, role), password_hash = ? WHERE id = ?",
+            [full_name, role, passHash, userId],
+            (err) => {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({ success: true });
+            }
+        );
+    } else {
+        db.run("UPDATE users SET full_name = COALESCE(?, full_name), role = COALESCE(?, role) WHERE id = ?",
+            [full_name, role, userId],
+            (err) => {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({ success: true });
+            }
+        );
+    }
+});
+
+app.delete('/api/users/:id', requireAuth(['admin']), (req, res) => {
+    const userId = Number(req.params.id);
+    if (req.user && req.user.userId === userId) {
+        return res.status(400).json({ error: 'No puedes eliminar tu propia cuenta' });
+    }
+    db.run("DELETE FROM users WHERE id = ?", [userId], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true });
+    });
+});
+
+// ==========================================
+// GESTIÓN DE CURSOS Y ROSTER DE ESTUDIANTES
+// ==========================================
+app.get('/api/courses', (req, res) => {
+    db.all(`SELECT c.id, c.name, COUNT(s.id) as student_count, c.created_at
+            FROM courses c
+            LEFT JOIN students s ON c.id = s.course_id
+            GROUP BY c.id
+            ORDER BY c.name ASC`, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+app.get('/api/courses/:id/students', (req, res) => {
+    db.all("SELECT id, full_name, identifier FROM students WHERE course_id = ? ORDER BY full_name ASC",
+        [req.params.id],
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json(rows);
+        }
+    );
+});
+
+app.delete('/api/courses/:id', requireAuth(['admin']), (req, res) => {
+    db.run("DELETE FROM courses WHERE id = ?", [req.params.id], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true });
+    });
+});
+
+// Plantilla descargable de Excel para carga de alumnos
+app.get('/api/roster/template', (req, res) => {
+    const wb = xlsx.utils.book_new();
+    const data = [
+        ['Curso', 'Nombre Completo', 'RUT_o_ID'],
+        ['7° Básico A', 'Alonso Contreras Silva', '21.458.912-3'],
+        ['7° Básico A', 'Camila Morales Gómez', '21.684.102-5'],
+        ['8° Básico B', 'Diego Valenzuela Rojas', '20.912.331-K'],
+        ['8° Básico B', 'Valentina Díaz Tapia', '20.841.554-1']
+    ];
+    const ws = xlsx.utils.aoa_to_sheet(data);
+    xlsx.utils.book_append_sheet(wb, ws, 'Nomina_Alumnos');
+    const buffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.set('Content-Disposition', 'attachment; filename="plantilla_cursos_alumnos.xlsx"');
+    res.send(buffer);
+});
+
+// Carga masiva de cursos y estudiantes (Excel .xlsx/.xls o .csv)
+app.post('/api/roster/import', requireAuth(['admin']), uploadRoster.single('file'), async (req, res) => {
+    if (!req.file || !req.file.buffer) {
+        return res.status(400).json({ error: 'Debes seleccionar un archivo Excel (.xlsx, .xls) o CSV' });
+    }
+
+    try {
+        const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+        let coursesCreated = 0;
+        let studentsImported = 0;
+
+        const getOrCreateCourse = (courseName) => {
+            return new Promise((resolve, reject) => {
+                const cleanName = courseName.trim();
+                db.get("SELECT id FROM courses WHERE LOWER(name) = LOWER(?)", [cleanName], (err, row) => {
+                    if (err) return reject(err);
+                    if (row) return resolve(row.id);
+                    db.run("INSERT INTO courses (name) VALUES (?)", [cleanName], function(insErr) {
+                        if (insErr) return reject(insErr);
+                        coursesCreated++;
+                        resolve(this.lastID);
+                    });
+                });
+            });
+        };
+
+        const insertStudent = (courseId, fullName, identifier) => {
+            return new Promise((resolve, reject) => {
+                const cleanName = fullName.trim();
+                const cleanId = identifier ? String(identifier).trim() : null;
+                db.get("SELECT id FROM students WHERE course_id = ? AND LOWER(full_name) = LOWER(?)",
+                    [courseId, cleanName],
+                    (err, row) => {
+                        if (err) return reject(err);
+                        if (row) return resolve({ duplicated: true });
+                        db.run("INSERT INTO students (course_id, full_name, identifier) VALUES (?, ?, ?)",
+                            [courseId, cleanName, cleanId],
+                            function(insErr) {
+                                if (insErr) return reject(insErr);
+                                studentsImported++;
+                                resolve({ inserted: true, id: this.lastID });
+                            }
+                        );
+                    }
+                );
+            });
+        };
+
+        for (const sheetName of workbook.SheetNames) {
+            const sheet = workbook.Sheets[sheetName];
+            const rows = xlsx.utils.sheet_to_json(sheet, { defval: '' });
+            if (!rows || rows.length === 0) continue;
+
+            for (const row of rows) {
+                let courseName = '';
+                let fullName = '';
+                let firstName = '';
+                let lastName = '';
+                let identifier = '';
+
+                for (const [key, val] of Object.entries(row)) {
+                    const k = key.trim().toLowerCase();
+                    const v = String(val).trim();
+                    if (!v) continue;
+
+                    if (/^(curso|nivel|grado|class|course)$/i.test(k) || (!courseName && /curso/i.test(k))) {
+                        courseName = v;
+                    } else if (/^(nombre\s*completo|estudiante|alumno|student)$/i.test(k)) {
+                        fullName = v;
+                    } else if (/^(nombre|nombres|first[\s_]?name)$/i.test(k)) {
+                        firstName = v;
+                    } else if (/^(apellido|apellidos|last[\s_]?name)$/i.test(k)) {
+                        lastName = v;
+                    } else if (/^(rut|id|dni|matricula|identificador)$/i.test(k)) {
+                        identifier = v;
+                    }
+                }
+
+                if (!fullName && (firstName || lastName)) {
+                    fullName = `${firstName} ${lastName}`.trim();
+                }
+
+                if (!courseName && !sheetName.toLowerCase().startsWith('sheet') && !sheetName.toLowerCase().startsWith('hoja')) {
+                    courseName = sheetName;
+                }
+
+                if (!courseName) courseName = 'Curso General';
+                if (!fullName) continue;
+
+                const courseId = await getOrCreateCourse(courseName);
+                await insertStudent(courseId, fullName, identifier);
+            }
+        }
+
+        res.json({
+            success: true,
+            coursesCreated,
+            studentsImported,
+            message: `Importación exitosa: ${coursesCreated} cursos nuevos creados, ${studentsImported} estudiantes registrados.`
+        });
+    } catch (err) {
+        console.error('Error importando nómina:', err);
+        res.status(500).json({ error: 'Error procesando archivo: ' + err.message });
+    }
+});
+
+// ==========================================
+// CARPETAS Y TAREAS (ASIGNACIONES DOCENTES)
+// ==========================================
+app.get('/api/folders', requireAuth(), (req, res) => {
+    const userId = req.user.userId;
+    const query = req.user.role === 'admin' && !userId
+        ? "SELECT * FROM folders ORDER BY name ASC"
+        : "SELECT * FROM folders WHERE user_id = ? ORDER BY name ASC";
+    const params = req.user.role === 'admin' && !userId ? [] : [userId];
+
+    db.all(query, params, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+app.post('/api/folders', requireAuth(), (req, res) => {
+    const { name, color } = req.body;
+    if (!name) return res.status(400).json({ error: 'El nombre de la carpeta es requerido' });
+    const userId = req.user.userId || 1;
+
+    db.run("INSERT INTO folders (user_id, name, color) VALUES (?, ?, ?)",
+        [userId, name.trim(), color || '#3b82f6'],
+        function(err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, id: this.lastID, name: name.trim(), color: color || '#3b82f6' });
+        }
+    );
+});
+
+app.delete('/api/folders/:id', requireAuth(), (req, res) => {
+    db.run("DELETE FROM folders WHERE id = ?", [req.params.id], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true });
+    });
+});
+
+// Listar tareas
+app.get('/api/assignments', requireAuth(), (req, res) => {
+    const userId = req.user.userId;
+    let query = `
+        SELECT a.*, c.name as course_name, u.full_name as teacher_name, f.name as folder_name,
+               (SELECT COUNT(*) FROM submissions s WHERE s.assignment_id = a.id) as submission_count
+        FROM assignments a
+        JOIN courses c ON a.course_id = c.id
+        JOIN users u ON a.user_id = u.id
+        LEFT JOIN folders f ON a.folder_id = f.id
+    `;
+    const params = [];
+    if (req.user.role !== 'admin' && userId) {
+        query += " WHERE a.user_id = ?";
+        params.push(userId);
+    }
+    query += " ORDER BY a.created_at DESC";
+
+    db.all(query, params, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// Crear tarea
+app.post('/api/assignments', requireAuth(), (req, res) => {
+    const { folder_id, course_id, title, instructions, app_type, is_group, max_group_size } = req.body;
+    if (!title || !course_id) {
+        return res.status(400).json({ error: 'Título y curso son obligatorios' });
+    }
+    const userId = req.user.userId || 1;
+
+    db.run(`INSERT INTO assignments (user_id, folder_id, course_id, title, instructions, app_type, is_group, max_group_size, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft')`,
+        [userId, folder_id || null, course_id, title.trim(), instructions || '', app_type || 'any', is_group ? 1 : 0, max_group_size || 4],
+        function(err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, id: this.lastID });
+        }
+    );
+});
+
+// Editar tarea
+app.put('/api/assignments/:id', requireAuth(), (req, res) => {
+    const { folder_id, course_id, title, instructions, app_type, is_group, max_group_size } = req.body;
+    db.run(`UPDATE assignments SET
+            folder_id = COALESCE(?, folder_id),
+            course_id = COALESCE(?, course_id),
+            title = COALESCE(?, title),
+            instructions = COALESCE(?, instructions),
+            app_type = COALESCE(?, app_type),
+            is_group = COALESCE(?, is_group),
+            max_group_size = COALESCE(?, max_group_size)
+            WHERE id = ?`,
+        [folder_id, course_id, title, instructions, app_type, is_group !== undefined ? (is_group ? 1 : 0) : null, max_group_size, req.params.id],
+        (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true });
+        }
+    );
+});
+
+// Eliminar tarea
+app.delete('/api/assignments/:id', requireAuth(), (req, res) => {
+    db.run("DELETE FROM assignments WHERE id = ?", [req.params.id], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true });
+    });
+});
+
+// Helper para obtener tarea activa completa
+function getActiveAssignmentDetails(callback) {
+    db.get(`SELECT a.*, c.name as course_name, u.full_name as teacher_name
+            FROM assignments a
+            JOIN courses c ON a.course_id = c.id
+            JOIN users u ON a.user_id = u.id
+            WHERE a.status = 'active'
+            ORDER BY a.created_at DESC LIMIT 1`, [], (err, assignment) => {
+        if (err || !assignment) return callback(err, null);
+        db.all("SELECT id, full_name, identifier FROM students WHERE course_id = ? ORDER BY full_name ASC",
+            [assignment.course_id],
+            (sErr, students) => {
+                if (sErr) return callback(sErr, null);
+                assignment.students = students || [];
+                callback(null, assignment);
+            }
+        );
+    });
+}
+
+// Activar tarea (Asignar a la sala en tiempo real)
+app.post('/api/assignments/:id/activate', requireAuth(), (req, res) => {
+    const assignId = req.params.id;
+    // Cerrar cualquier tarea activa previa
+    db.run("UPDATE assignments SET status = 'closed' WHERE status = 'active'", (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        // Marcar la nueva tarea como activa
+        db.run("UPDATE assignments SET status = 'active' WHERE id = ?", [assignId], (actErr) => {
+            if (actErr) return res.status(500).json({ error: actErr.message });
+            getActiveAssignmentDetails((detErr, activeData) => {
+                if (activeData) {
+                    io.emit('active_assignment_updated', activeData);
+                }
+                res.json({ success: true, assignment: activeData });
+            });
+        });
+    });
+});
+
+// Desactivar tarea activa
+app.post('/api/assignments/:id/deactivate', requireAuth(), (req, res) => {
+    db.run("UPDATE assignments SET status = 'closed' WHERE id = ?", [req.params.id], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        io.emit('active_assignment_updated', null);
+        res.json({ success: true });
+    });
+});
+
+// Obtener tarea activa (Endpoint público para estaciones y mini editores)
+app.get('/api/assignments/active', (req, res) => {
+    getActiveAssignmentDetails((err, activeData) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!activeData) return res.json({ active: false });
+        res.json({ active: true, assignment: activeData });
+    });
+});
+
+// ==========================================
+// SUBMISSIONS (ENTREGAS DE ALUMNOS)
+// ==========================================
+app.post('/api/assignments/:id/turn-in', uploadSubmission.single('file'), (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No se subió ningún archivo' });
+    const assignmentId = req.params.id;
+    const { clientId, clientName, courseName, studentNames, mainStudentName, appType, notes } = req.body;
+
+    let parsedStudentNames = [];
+    if (studentNames) {
+        try {
+            parsedStudentNames = typeof studentNames === 'string' && studentNames.startsWith('[')
+                ? JSON.parse(studentNames)
+                : String(studentNames).split(',').map(s => s.trim()).filter(Boolean);
+        } catch(e) {
+            parsedStudentNames = [String(studentNames).trim()];
+        }
+    }
+    const mainStudent = mainStudentName || (parsedStudentNames.length > 0 ? parsedStudentNames[0] : 'Estudiante');
+    const filePath = `/uploads/submissions/${assignmentId}/${req.file.filename}`;
+
+    db.run(`INSERT INTO submissions (assignment_id, client_id, client_name, course_name, student_names, main_student_name, app_type, filename, file_path, file_size, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+            assignmentId,
+            clientId || 'station',
+            clientName || 'Puesto Estudiante',
+            courseName || '',
+            JSON.stringify(parsedStudentNames),
+            mainStudent,
+            appType || 'documento',
+            req.file.originalname,
+            filePath,
+            req.file.size,
+            notes || ''
+        ],
+        function(err) {
+            if (err) return res.status(500).json({ error: err.message });
+            const submissionItem = {
+                id: this.lastID,
+                assignment_id: assignmentId,
+                client_id: clientId,
+                client_name: clientName,
+                course_name: courseName,
+                student_names: parsedStudentNames,
+                main_student_name: mainStudent,
+                app_type: appType,
+                filename: req.file.originalname,
+                file_path: filePath,
+                url: filePath,
+                created_at: new Date().toISOString()
+            };
+            io.emit('new_submission', submissionItem);
+            io.emit('new_turn_in', submissionItem);
+            res.json({ success: true, submission: submissionItem });
+        }
+    );
+});
+
+// Listar entregas de una tarea
+app.get('/api/assignments/:id/submissions', (req, res) => {
+    db.all("SELECT * FROM submissions WHERE assignment_id = ? ORDER BY created_at DESC", [req.params.id], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        const formatted = (rows || []).map(r => {
+            try { r.student_names = JSON.parse(r.student_names); } catch(e) {}
+            return r;
+        });
+        res.json(formatted);
+    });
+});
+
+// Descargar todas las entregas de una tarea comprimidas en ZIP
+app.get('/api/assignments/:id/download-all', (req, res) => {
+    const assignmentId = req.params.id;
+    db.get("SELECT title FROM assignments WHERE id = ?", [assignmentId], (aErr, assignment) => {
+        if (aErr || !assignment) return res.status(404).json({ error: 'Tarea no encontrada' });
+
+        db.all("SELECT * FROM submissions WHERE assignment_id = ?", [assignmentId], (sErr, submissions) => {
+            if (sErr) return res.status(500).json({ error: sErr.message });
+            if (!submissions || submissions.length === 0) {
+                return res.status(404).json({ error: 'No hay entregas para descargar' });
+            }
+
+            try {
+                const zip = new AdmZip();
+                submissions.forEach((sub) => {
+                    const relativePath = sub.file_path.startsWith('/') ? sub.file_path.slice(1) : sub.file_path;
+                    const fullDiskPath = path.join(__dirname, '..', 'public', relativePath);
+                    if (fs.existsSync(fullDiskPath)) {
+                        let namesStr = sub.main_student_name || 'Alumno';
+                        try {
+                            const parsed = JSON.parse(sub.student_names);
+                            if (Array.isArray(parsed) && parsed.length > 0) {
+                                namesStr = parsed.join('_y_');
+                            }
+                        } catch(e) {}
+
+                        const cleanCourse = (sub.course_name || 'Curso').replace(/[^a-zA-Z0-9_\-]/g, '_');
+                        const cleanNames = namesStr.replace(/[^a-zA-Z0-9_\-]/g, '_');
+                        const cleanOrig = sub.filename.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+                        const entryName = `${cleanCourse}__${cleanNames}__${cleanOrig}`;
+                        zip.addLocalFile(fullDiskPath, '', entryName);
+                    }
+                });
+
+                const zipBuffer = zip.toBuffer();
+                const safeTitle = assignment.title.replace(/[^a-zA-Z0-9_\-]/g, '_');
+                res.set('Content-Type', 'application/zip');
+                res.set('Content-Disposition', `attachment; filename="Entregas_${safeTitle}.zip"`);
+                res.send(zipBuffer);
+            } catch (zErr) {
+                console.error('Error generando ZIP:', zErr);
+                res.status(500).json({ error: 'Error generando archivo ZIP: ' + zErr.message });
+            }
+        });
+    });
+});
+
+// Eliminar entrega individual
+app.delete('/api/submissions/:id', (req, res) => {
+    db.get("SELECT file_path FROM submissions WHERE id = ?", [req.params.id], (err, row) => {
+        if (row && row.file_path) {
+            const relativePath = row.file_path.startsWith('/') ? row.file_path.slice(1) : row.file_path;
+            const fullDiskPath = path.join(__dirname, '..', 'public', relativePath);
+            if (fs.existsSync(fullDiskPath)) fs.unlinkSync(fullDiskPath);
+        }
+        db.run("DELETE FROM submissions WHERE id = ?", [req.params.id], (delErr) => {
+            if (delErr) return res.status(500).json({ error: delErr.message });
             res.json({ success: true });
         });
     });

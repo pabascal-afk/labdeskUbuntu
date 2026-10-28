@@ -1,6 +1,21 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
+
+// Helpers criptográficos para contraseñas seguras (sin dependencias binarias)
+function hashPassword(password) {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+    return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, stored) {
+    if (!stored || !stored.includes(':')) return false;
+    const [salt, originalHash] = stored.split(':');
+    const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+    return hash === originalHash;
+}
 
 const dbPath = path.resolve(__dirname, '..', 'labdesk.db');
 const db = new sqlite3.Database(dbPath, (err) => {
@@ -89,7 +104,7 @@ function initSchema() {
             db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('custom_browser_presets', ?)`, [defaultPresets]);
         });
 
-        // Tabla de Entregas de Tareas (Buzón de alumnos)
+        // Tabla de Entregas de Tareas (Buzón de alumnos legado)
         db.run(`CREATE TABLE IF NOT EXISTS turn_ins (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             client_id TEXT NOT NULL,
@@ -101,6 +116,101 @@ function initSchema() {
             file_size INTEGER,
             created_at DATETIME DEFAULT (datetime('now')),
             notes TEXT
+        )`);
+
+        // ==========================================
+        // SISTEMA DE USUARIOS, CURSOS Y TAREAS
+        // ==========================================
+
+        // Habilitar Foreign Keys
+        db.run("PRAGMA foreign_keys = ON;");
+
+        // Tabla de usuarios (admin y profesores)
+        db.run(`CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            full_name TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'teacher',
+            created_at DATETIME DEFAULT (datetime('now'))
+        )`, () => {
+            // Inicializar cuentas de administrador y profesor por defecto si la tabla está vacía
+            db.get("SELECT COUNT(*) as count FROM users", (err, row) => {
+                if (!err && row && row.count === 0) {
+                    const adminHash = hashPassword('admin123');
+                    const profeHash = hashPassword('profe123');
+                    db.run(`INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)`,
+                        ['admin', adminHash, 'Administrador del Sistema', 'admin']
+                    );
+                    db.run(`INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)`,
+                        ['profesor', profeHash, 'Profesor Titular', 'teacher']
+                    );
+                    console.log('✅ Usuarios por defecto creados: admin (admin123) y profesor (profe123)');
+                }
+            });
+        });
+
+        // Tabla de cursos escolares
+        db.run(`CREATE TABLE IF NOT EXISTS courses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            created_at DATETIME DEFAULT (datetime('now'))
+        )`);
+
+        // Tabla de estudiantes por curso (Roster escolar)
+        db.run(`CREATE TABLE IF NOT EXISTS students (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            course_id INTEGER NOT NULL,
+            full_name TEXT NOT NULL,
+            identifier TEXT,
+            created_at DATETIME DEFAULT (datetime('now')),
+            FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+        )`);
+
+        // Tabla de carpetas organizadoras de profesores
+        db.run(`CREATE TABLE IF NOT EXISTS folders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            color TEXT DEFAULT '#3b82f6',
+            created_at DATETIME DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )`);
+
+        // Tabla de tareas (asignadas por profesores)
+        db.run(`CREATE TABLE IF NOT EXISTS assignments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            folder_id INTEGER,
+            course_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            instructions TEXT,
+            app_type TEXT DEFAULT 'any',
+            is_group INTEGER DEFAULT 0,
+            max_group_size INTEGER DEFAULT 4,
+            status TEXT DEFAULT 'draft',
+            created_at DATETIME DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL,
+            FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+        )`);
+
+        // Tabla de entregas de tareas vinculadas a la asignación
+        db.run(`CREATE TABLE IF NOT EXISTS submissions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            assignment_id INTEGER NOT NULL,
+            client_id TEXT,
+            client_name TEXT,
+            course_name TEXT,
+            student_names TEXT,
+            main_student_name TEXT,
+            app_type TEXT,
+            filename TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            file_size INTEGER,
+            notes TEXT,
+            created_at DATETIME DEFAULT (datetime('now')),
+            FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE
         )`);
     });
 }
@@ -374,5 +484,8 @@ echo "=========================================="`;
         });
     });
 }
+
+db.hashPassword = hashPassword;
+db.verifyPassword = verifyPassword;
 
 module.exports = db;

@@ -44,7 +44,12 @@ contextBridge.exposeInMainWorld('labdeskAPI', {
         saveLocal: (filename, content) => ipcRenderer.invoke('files:saveLocal', { filename, content })
     },
     turnIn: {
-        submitFile: (data) => ipcRenderer.invoke('turnIn:submitFile', data)
+        submitFile: (data) => ipcRenderer.invoke('turnIn:submitFile', data),
+        getActiveAssignment: () => ipcRenderer.invoke('turnIn:getActiveAssignment'),
+        getCourses: () => ipcRenderer.invoke('turnIn:getCourses'),
+        getStudents: (courseId) => ipcRenderer.invoke('turnIn:getStudents', courseId),
+        submitAssignment: (data) => ipcRenderer.invoke('turnIn:submitAssignment', data),
+        onActiveAssignmentChanged: (callback) => ipcRenderer.on('active_assignment_changed', (e, data) => callback(data))
     },
     connection: {
         onServerConnectionChanged: (callback) => ipcRenderer.on('server_connection_changed', (e, data) => callback(data))

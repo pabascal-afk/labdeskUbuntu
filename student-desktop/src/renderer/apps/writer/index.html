@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mini Writer - LabDesk</title>
     <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Source+Code+Pro:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../turnin.css">
+    <script src="../turnin.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Color Emoji', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif; }
         body { background: #0b1120; color: #f8fafc; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
@@ -571,34 +573,21 @@
             window.print();
         }
 
-        async function turnInDocument() {
-            const student = prompt('Ingresa tu nombre y apellido para la entrega:');
-            if (!student) return;
-
-            const title = titleInput.value.trim() || 'documento';
-            const filename = `${title.replace(/[^a-zA-Z0-9_\-]/g, '_')}_${student.replace(/[^a-zA-Z0-9_\-]/g, '_')}.html`;
-            const content = editor.innerHTML;
-
-            saveStatusEl.textContent = 'Enviando al profesor...';
-
-            if (window.parent && window.parent.labdeskAPI) {
-                const res = await window.parent.labdeskAPI.turnIn.submitFile({
-                    filename,
-                    content,
+        function turnInDocument() {
+            if (typeof LabDeskTurnIn !== 'undefined') {
+                LabDeskTurnIn.open({
                     appType: 'Mini Writer',
-                    studentName: student,
-                    notes: `Documento con ${editor.innerText.trim().split(/\s+/).length} palabras`
+                    getFilename: (studentName) => {
+                        const title = titleInput.value.trim() || 'documento';
+                        return `${title.replace(/[^a-zA-Z0-9_\-]/g, '_')}_${studentName.replace(/[^a-zA-Z0-9_\-]/g, '_')}.html`;
+                    },
+                    getContent: () => editor.innerHTML,
+                    onSuccess: () => {
+                        saveStatusEl.textContent = '✅ Entregado al profesor exitosamente';
+                    }
                 });
-
-                if (res.success) {
-                    saveStatusEl.textContent = '✅ Entregado al profesor exitosamente';
-                    alert('🎉 ¡Tu trabajo ha sido entregado exitosamente al profesor!');
-                } else {
-                    saveStatusEl.textContent = 'Error en la entrega';
-                    alert('Error entregando trabajo: ' + (res.error || 'Servidor no disponible'));
-                }
             } else {
-                alert('No se detectó conexión con el servidor LabDesk.');
+                alert('Módulo de entregas no disponible');
             }
         }
 

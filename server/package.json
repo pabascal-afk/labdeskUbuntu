@@ -17,12 +17,14 @@
   "author": "LabDesk",
   "license": "MIT",
   "dependencies": {
+    "adm-zip": "^0.6.1",
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "multer": "^1.4.5-lts.1",
     "socket.io": "^4.7.5",
     "sqlite3": "^5.1.7",
-    "wake_on_lan": "^1.0.0"
+    "wake_on_lan": "^1.0.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "socket.io-client": "^4.8.4"

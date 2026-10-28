@@ -67,6 +67,30 @@ class LabDeskAgent {
             });
 
             this.sendToRenderer('server_connection_changed', { connected: true, serverUrl: this.serverUrl });
+
+            // Consultar tarea activa al conectar
+            try {
+                const http = require('http');
+                const parsed = new URL(this.serverUrl + '/api/assignments/active');
+                http.get({
+                    hostname: parsed.hostname,
+                    port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+                    path: parsed.pathname
+                }, (res) => {
+                    let body = '';
+                    res.on('data', c => body += c);
+                    res.on('end', () => {
+                        try {
+                            const data = JSON.parse(body);
+                            if (data && data.active) {
+                                this.sendToRenderer('active_assignment_changed', data.assignment);
+                            } else {
+                                this.sendToRenderer('active_assignment_changed', null);
+                            }
+                        } catch(e) {}
+                    });
+                }).on('error', () => {});
+            } catch(e) {}
         });
 
         this.socket.on('disconnect', () => {
@@ -145,6 +169,12 @@ class LabDeskAgent {
         // Entrada RDP
         this.socket.on('rdp_input', (data) => {
             rdp.handleInput(data);
+        });
+
+        // Actualización de Tarea Asignada en Tiempo Real
+        this.socket.on('active_assignment_updated', (data) => {
+            console.log('📋 Notificación de tarea activa recibida:', data ? data.title : 'Ninguna');
+            this.sendToRenderer('active_assignment_changed', data);
         });
     }
 

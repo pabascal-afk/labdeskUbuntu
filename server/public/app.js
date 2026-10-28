@@ -8,15 +8,29 @@ let activeSectorId = primarySectorId;
 let currentActiveRdpClientId = null;
 let draggedSectorId = null;
 
+// Variables de sesión y tareas
+let authToken = localStorage.getItem('labdesk_token') || null;
+let currentUser = null;
+let currentFolders = [];
+let currentAssignments = [];
+let selectedFolderId = null;
+let viewingAssignmentId = null;
+let currentCourses = [];
+
 // ==========================================
 // INICIALIZACIÓN
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
+    checkAuthStatus();
     setupSocketListeners();
     setupEventListeners();
     fetchSectors();
     fetchClients();
     fetchTurnIns();
+
+    if (window.location.hash === '#tareas') {
+        setTimeout(() => openAssignmentsModal(), 400);
+    }
 });
 
 // ==========================================
@@ -45,8 +59,22 @@ function setupSocketListeners() {
     });
 
     socket.on('new_turn_in', (item) => {
-        showNotification(`📥 Nueva entrega: ${item.student_name} (${item.filename})`);
+        showNotification(`📥 Nueva entrega: ${item.student_name || item.main_student_name} (${item.filename})`);
         fetchTurnIns();
+    });
+
+    socket.on('new_submission', (sub) => {
+        showNotification(`📥 Nueva entrega: ${sub.main_student_name || 'Estudiante'} (${sub.filename})`);
+        fetchTurnIns();
+        if (document.getElementById('modal-submissions').classList.contains('show')) {
+            refreshCurrentSubmissions();
+        }
+    });
+
+    socket.on('active_assignment_updated', () => {
+        if (document.getElementById('modal-assignments').classList.contains('show')) {
+            fetchAssignments();
+        }
     });
 
     socket.on('script_result_dashboard', ({ clientId, output, error }) => {
@@ -77,6 +105,12 @@ function setupEventListeners() {
     document.getElementById('btn-scripts-modal').onclick = () => { openModal('modal-scripts'); fetchScripts(); };
     document.getElementById('btn-power-modal').onclick = () => openModal('modal-power');
     document.getElementById('btn-settings-modal').onclick = () => { openModal('modal-settings'); fetchSettings(); };
+    
+    // Tareas y Roster Escolar
+    const btnAssignments = document.getElementById('btn-assignments-modal');
+    if (btnAssignments) btnAssignments.onclick = () => openAssignmentsModal();
+    const btnRoster = document.getElementById('btn-roster-modal');
+    if (btnRoster) btnRoster.onclick = () => openRosterModal();
 
     // Editor de Scripts Bash
     const btnNewScript = document.getElementById('btn-new-script');
@@ -1057,3 +1091,632 @@ function showNotification(msg) {
     document.body.appendChild(notif);
     setTimeout(() => notif.remove(), 4000);
 }
+
+// ==========================================
+// AUTENTICACIÓN Y SESIONES
+// ==========================================
+async function authFetch(url, options = {}) {
+    options.headers = options.headers || {};
+    if (authToken) {
+        options.headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    const res = await fetch(url, options);
+    if (res.status === 401 && !url.includes('/api/auth/')) {
+        openModal('modal-login');
+    }
+    return res;
+}
+
+async function checkAuthStatus() {
+    if (!authToken) {
+        updateAuthUI(null);
+        return;
+    }
+    try {
+        const res = await fetch('/api/auth/me', {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            currentUser = data.user;
+            updateAuthUI(currentUser);
+        } else {
+            localStorage.removeItem('labdesk_token');
+            authToken = null;
+            currentUser = null;
+            updateAuthUI(null);
+        }
+    } catch(e) {
+        updateAuthUI(null);
+    }
+}
+
+function updateAuthUI(user) {
+    const navLabel = document.getElementById('nav-user-label');
+    const btnRoster = document.getElementById('btn-roster-modal');
+    const loginFormArea = document.getElementById('login-form-area');
+    const profileArea = document.getElementById('profile-area');
+    const loginFooter = document.getElementById('login-footer');
+
+    if (user) {
+        if (navLabel) navLabel.innerHTML = `👤 ${escapeHtml(user.fullName || user.username)}`;
+        if (loginFormArea) loginFormArea.style.display = 'none';
+        if (profileArea) {
+            profileArea.style.display = 'block';
+            document.getElementById('profile-fullname').textContent = user.fullName || user.username;
+            document.getElementById('profile-role').textContent = user.role === 'admin' ? 'Administrador' : 'Profesor';
+            document.getElementById('profile-username').textContent = `@${user.username}`;
+        }
+        if (loginFooter) loginFooter.style.display = 'none';
+        if (btnRoster) btnRoster.style.display = user.role === 'admin' ? 'inline-block' : 'none';
+    } else {
+        if (navLabel) navLabel.innerHTML = `👤 Iniciar Sesión`;
+        if (loginFormArea) loginFormArea.style.display = 'block';
+        if (profileArea) profileArea.style.display = 'none';
+        if (loginFooter) loginFooter.style.display = 'flex';
+        if (btnRoster) btnRoster.style.display = 'none';
+    }
+}
+
+function openLoginOrProfileModal() {
+    openModal('modal-login');
+}
+
+async function submitLogin() {
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value.trim();
+    const errorEl = document.getElementById('login-error-msg');
+    errorEl.style.display = 'none';
+
+    if (!username || !password) {
+        errorEl.textContent = 'Ingresa usuario y contraseña';
+        errorEl.style.display = 'block';
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (data.success && data.token) {
+            authToken = data.token;
+            currentUser = data.user;
+            localStorage.setItem('labdesk_token', authToken);
+            updateAuthUI(currentUser);
+            closeModal('modal-login');
+            showNotification(`¡Bienvenido(a), ${currentUser.fullName}!`);
+            document.getElementById('login-password').value = '';
+        } else {
+            errorEl.textContent = data.error || 'Credenciales inválidas';
+            errorEl.style.display = 'block';
+        }
+    } catch(err) {
+        errorEl.textContent = 'Error conectando con el servidor';
+        errorEl.style.display = 'block';
+    }
+}
+
+async function logoutUser() {
+    if (authToken) {
+        await fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        }).catch(() => {});
+    }
+    localStorage.removeItem('labdesk_token');
+    authToken = null;
+    currentUser = null;
+    updateAuthUI(null);
+    closeModal('modal-login');
+    showNotification('Has cerrado sesión exitosamente.');
+}
+
+// ==========================================
+// GESTIÓN DE CURSOS Y ROSTER (ADMIN)
+// ==========================================
+function openRosterModal() {
+    openModal('modal-roster');
+    fetchCourses();
+}
+
+async function fetchCourses() {
+    try {
+        const res = await authFetch('/api/courses');
+        currentCourses = await res.json();
+        renderCoursesTable(currentCourses);
+    } catch(err) {
+        console.error('Error cargando cursos:', err);
+    }
+}
+
+function renderCoursesTable(courses) {
+    const tbody = document.getElementById('roster-courses-tbody');
+    const totalCoursesEl = document.getElementById('roster-total-courses');
+    const totalStudentsEl = document.getElementById('roster-total-students');
+
+    if (!tbody) return;
+    if (!courses || courses.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center">No hay cursos cargados aún. Sube un archivo Excel arriba.</td></tr>';
+        if (totalCoursesEl) totalCoursesEl.textContent = '0';
+        if (totalStudentsEl) totalStudentsEl.textContent = '0';
+        return;
+    }
+
+    let totalStudents = 0;
+    tbody.innerHTML = courses.map(c => {
+        totalStudents += (c.student_count || 0);
+        return `
+            <tr>
+                <td><strong>${escapeHtml(c.name)}</strong></td>
+                <td><span class="badge">${c.student_count || 0} alumnos</span></td>
+                <td><small style="color:var(--text-muted);">${c.created_at ? new Date(c.created_at).toLocaleDateString() : 'Hoy'}</small></td>
+                <td>
+                    <button class="btn btn-danger btn-sm" onclick="deleteCourse(${c.id})" style="padding:2px 8px; font-size:0.75rem;">🗑️ Eliminar</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    if (totalCoursesEl) totalCoursesEl.textContent = courses.length;
+    if (totalStudentsEl) totalStudentsEl.textContent = totalStudents;
+}
+
+async function uploadRosterFile() {
+    const fileInput = document.getElementById('roster-file-input');
+    const statusEl = document.getElementById('roster-import-status');
+    const file = fileInput.files[0];
+
+    if (!file) {
+        alert('Selecciona un archivo Excel (.xlsx, .xls) o CSV primero.');
+        return;
+    }
+
+    statusEl.style.display = 'block';
+    statusEl.style.color = '#3b82f6';
+    statusEl.textContent = 'Procesando e importando estudiantes...';
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const res = await authFetch('/api/roster/import', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+        if (data.success) {
+            statusEl.style.color = '#10b981';
+            statusEl.textContent = `✅ ${data.message}`;
+            fileInput.value = '';
+            fetchCourses();
+            showNotification('Nómina importada correctamente.');
+        } else {
+            statusEl.style.color = '#ef4444';
+            statusEl.textContent = `❌ ${data.error || 'Error al importar archivo'}`;
+        }
+    } catch(err) {
+        statusEl.style.color = '#ef4444';
+        statusEl.textContent = 'Error de conexión con el servidor.';
+    }
+}
+
+async function deleteCourse(courseId) {
+    if (!confirm('¿Estás seguro de eliminar este curso y todos sus estudiantes?')) return;
+    try {
+        const res = await authFetch(`/api/courses/${courseId}`, { method: 'DELETE' });
+        if (res.ok) {
+            showNotification('Curso eliminado.');
+            fetchCourses();
+        }
+    } catch(err) {
+        console.error('Error eliminando curso:', err);
+    }
+}
+
+// ==========================================
+// TAREAS Y CARPETAS DOCENTES
+// ==========================================
+async function openAssignmentsModal() {
+    if (!currentUser) {
+        openModal('modal-login');
+        return;
+    }
+    openModal('modal-assignments');
+    await fetchFolders();
+    await fetchCourses();
+    populateCourseDropdownForAssignments();
+    await fetchAssignments();
+}
+
+async function fetchFolders() {
+    try {
+        const res = await authFetch('/api/folders');
+        currentFolders = await res.json();
+        renderFoldersList(currentFolders);
+        populateFolderDropdownForAssignments();
+    } catch(err) {
+        console.error('Error cargando carpetas:', err);
+    }
+}
+
+function renderFoldersList(folders) {
+    const listEl = document.getElementById('folders-list');
+    if (!listEl) return;
+
+    let html = `
+        <div class="folder-item ${selectedFolderId === null ? 'active' : ''}" onclick="selectFolder(null)">
+            <span>📁 Todas las Tareas</span>
+        </div>
+    `;
+
+    (folders || []).forEach(f => {
+        html += `
+            <div class="folder-item ${selectedFolderId === f.id ? 'active' : ''}" onclick="selectFolder(${f.id})">
+                <div style="display:flex; align-items:center;">
+                    <span class="folder-badge-color" style="background:${f.color || '#3b82f6'};"></span>
+                    <span>${escapeHtml(f.name)}</span>
+                </div>
+                <button type="button" class="btn-folder-delete" onclick="event.stopPropagation(); deleteFolder(${f.id})" title="Eliminar Carpeta">&times;</button>
+            </div>
+        `;
+    });
+
+    listEl.innerHTML = html;
+}
+
+function selectFolder(folderId) {
+    selectedFolderId = folderId;
+    renderFoldersList(currentFolders);
+    const titleEl = document.getElementById('current-folder-title');
+    if (folderId === null) {
+        titleEl.textContent = 'Todas las Tareas';
+    } else {
+        const f = currentFolders.find(x => x.id === folderId);
+        titleEl.textContent = f ? `📁 ${f.name}` : 'Tareas';
+    }
+    renderAssignmentsCards();
+}
+
+async function promptNewFolder() {
+    const name = prompt('Nombre de la nueva carpeta (ej. 7° Básico Tecnología):');
+    if (!name || !name.trim()) return;
+
+    try {
+        const res = await authFetch('/api/folders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name.trim() })
+        });
+        if (res.ok) {
+            showNotification('Carpeta creada.');
+            fetchFolders();
+        }
+    } catch(err) {
+        console.error('Error creando carpeta:', err);
+    }
+}
+
+async function deleteFolder(folderId) {
+    if (!confirm('¿Eliminar esta carpeta? (Las tareas dentro no se borrarán).')) return;
+    try {
+        const res = await authFetch(`/api/folders/${folderId}`, { method: 'DELETE' });
+        if (res.ok) {
+            if (selectedFolderId === folderId) selectedFolderId = null;
+            fetchFolders();
+            fetchAssignments();
+        }
+    } catch(err) {
+        console.error('Error eliminando carpeta:', err);
+    }
+}
+
+function populateCourseDropdownForAssignments() {
+    const sel = document.getElementById('assign-course');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Selecciona un curso...</option>';
+    (currentCourses || []).forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = `${c.name} (${c.student_count || 0} alumnos)`;
+        sel.appendChild(opt);
+    });
+}
+
+function populateFolderDropdownForAssignments() {
+    const sel = document.getElementById('assign-folder');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">(Sin Carpeta)</option>';
+    (currentFolders || []).forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f.id;
+        opt.textContent = f.name;
+        sel.appendChild(opt);
+    });
+}
+
+function toggleAssignmentForm(show) {
+    const formCard = document.getElementById('assignment-form-card');
+    const isVisible = formCard.style.display !== 'none';
+    const willShow = show !== undefined ? show : !isVisible;
+
+    formCard.style.display = willShow ? 'block' : 'none';
+    if (willShow) {
+        document.getElementById('assignment-edit-id').value = '';
+        document.getElementById('assign-title').value = '';
+        document.getElementById('assign-instructions').value = '';
+        document.getElementById('assign-group-check').checked = false;
+        document.getElementById('assign-group-size-wrap').style.display = 'none';
+        if (selectedFolderId) {
+            document.getElementById('assign-folder').value = selectedFolderId;
+        }
+        document.getElementById('assign-title').focus();
+    }
+}
+
+async function fetchAssignments() {
+    try {
+        const res = await authFetch('/api/assignments');
+        currentAssignments = await res.json();
+        renderAssignmentsCards();
+    } catch(err) {
+        console.error('Error obteniendo tareas:', err);
+    }
+}
+
+function renderAssignmentsCards() {
+    const container = document.getElementById('assignments-cards-container');
+    if (!container) return;
+
+    let filtered = currentAssignments;
+    if (selectedFolderId !== null) {
+        filtered = currentAssignments.filter(a => a.folder_id === selectedFolderId);
+    }
+
+    if (!filtered || filtered.length === 0) {
+        container.innerHTML = '<p class="text-center" style="color:var(--text-muted); padding:30px;">No hay tareas en esta sección. Haz clic en <strong>+ Nueva Tarea</strong> para crear una.</p>';
+        return;
+    }
+
+    container.innerHTML = filtered.map(a => {
+        const isActive = a.status === 'active';
+        const appLabel = a.app_type === 'writer' ? 'Mini Writer' : (a.app_type === 'calc' ? 'Mini Calc' : (a.app_type === 'slides' ? 'Mini Slides' : 'Cualquier Editor'));
+        const modeLabel = a.is_group ? `👥 Grupal (Hasta ${a.max_group_size})` : '👤 Individual';
+
+        return `
+            <div class="assignment-card ${isActive ? 'active-room' : ''}">
+                <div class="assignment-card-top">
+                    <div class="assignment-title-area">
+                        <h4>
+                            ${isActive ? '<span class="badge-active-pulse">● ASIGNADA EN SALA</span>' : ''}
+                            <span>${escapeHtml(a.title)}</span>
+                        </h4>
+                        <div class="assignment-meta-row" style="margin-top:4px;">
+                            <span>🏫 <strong>${escapeHtml(a.course_name)}</strong></span>
+                            <span>💻 ${appLabel}</span>
+                            <span>${modeLabel}</span>
+                            ${a.folder_name ? `<span>📁 ${escapeHtml(a.folder_name)}</span>` : ''}
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn btn-sm btn-danger" onclick="deleteAssignment(${a.id})" title="Eliminar Tarea" style="padding:2px 8px;">🗑️</button>
+                    </div>
+                </div>
+
+                ${a.instructions ? `<div class="assignment-instructions-box">${escapeHtml(a.instructions)}</div>` : ''}
+
+                <div class="assignment-actions-row">
+                    <div>
+                        ${isActive ? `
+                            <button class="btn btn-sm btn-warning" onclick="deactivateAssignment(${a.id})">
+                                ⏹️ Finalizar Asignación
+                            </button>
+                        ` : `
+                            <button class="btn btn-sm btn-primary" onclick="activateAssignment(${a.id})">
+                                🚀 Asignar a la Sala
+                            </button>
+                        `}
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                        <button class="btn btn-sm btn-secondary" onclick="viewSubmissions(${a.id}, '${escapeHtml(a.title)}', '${escapeHtml(a.course_name)}', '${escapeHtml(a.teacher_name)}')">
+                            📥 Entregas (${a.submission_count || 0})
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function saveAssignment() {
+    const id = document.getElementById('assignment-edit-id').value;
+    const title = document.getElementById('assign-title').value.trim();
+    const course_id = document.getElementById('assign-course').value;
+    const folder_id = document.getElementById('assign-folder').value || null;
+    const app_type = document.getElementById('assign-app').value;
+    const is_group = document.getElementById('assign-group-check').checked;
+    const max_group_size = Number(document.getElementById('assign-max-group').value) || 4;
+    const instructions = document.getElementById('assign-instructions').value.trim();
+
+    if (!title || !course_id) {
+        alert('Por favor ingresa un título y selecciona el curso asignado.');
+        return;
+    }
+
+    const payload = { folder_id, course_id, title, instructions, app_type, is_group, max_group_size };
+
+    try {
+        const url = id ? `/api/assignments/${id}` : '/api/assignments';
+        const method = id ? 'PUT' : 'POST';
+        const res = await authFetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            showNotification(id ? 'Tarea actualizada.' : 'Tarea creada correctamente.');
+            toggleAssignmentForm(false);
+            fetchAssignments();
+        } else {
+            const err = await res.json();
+            alert('Error al guardar: ' + (err.error || 'No se pudo guardar la tarea'));
+        }
+    } catch(err) {
+        console.error('Error guardando tarea:', err);
+    }
+}
+
+async function deleteAssignment(id) {
+    if (!confirm('¿Seguro que deseas eliminar esta tarea y sus entregas asociadas?')) return;
+    try {
+        const res = await authFetch(`/api/assignments/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+            showNotification('Tarea eliminada.');
+            fetchAssignments();
+        }
+    } catch(err) {
+        console.error('Error eliminando tarea:', err);
+    }
+}
+
+async function activateAssignment(id) {
+    try {
+        const res = await authFetch(`/api/assignments/${id}/activate`, { method: 'POST' });
+        if (res.ok) {
+            showNotification('🚀 Tarea asignada en la sala. Los alumnos ya pueden verla.');
+            fetchAssignments();
+        }
+    } catch(err) {
+        console.error('Error activando tarea:', err);
+    }
+}
+
+async function deactivateAssignment(id) {
+    try {
+        const res = await authFetch(`/api/assignments/${id}/deactivate`, { method: 'POST' });
+        if (res.ok) {
+            showNotification('⏹️ Asignación cerrada en la sala.');
+            fetchAssignments();
+        }
+    } catch(err) {
+        console.error('Error cerrando asignación:', err);
+    }
+}
+
+// ==========================================
+// BANDEJA DE ENTREGAS Y DESCARGA ZIP
+// ==========================================
+async function viewSubmissions(assignmentId, title, course, teacher) {
+    viewingAssignmentId = assignmentId;
+    document.getElementById('sub-assignment-name').textContent = title;
+    document.getElementById('sub-assignment-meta').textContent = `${course} • Profesor: ${teacher}`;
+    openModal('modal-submissions');
+    await refreshCurrentSubmissions();
+}
+
+async function refreshCurrentSubmissions() {
+    if (!viewingAssignmentId) return;
+    try {
+        const res = await fetch(`/api/assignments/${viewingAssignmentId}/submissions`);
+        const submissions = await res.json();
+        renderSubmissionsTable(submissions);
+    } catch(err) {
+        console.error('Error obteniendo entregas:', err);
+    }
+}
+
+function renderSubmissionsTable(submissions) {
+    const tbody = document.getElementById('submissions-tbody');
+    if (!tbody) return;
+
+    if (!submissions || submissions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center">No hay entregas para esta tarea todavía.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = submissions.map(s => {
+        let studentText = s.main_student_name || 'Estudiante';
+        if (s.student_names && Array.isArray(s.student_names) && s.student_names.length > 1) {
+            studentText = `<strong>👥 ${escapeHtml(s.student_names.join(', '))}</strong>`;
+        } else {
+            studentText = `<strong>👤 ${escapeHtml(studentText)}</strong>`;
+        }
+
+        const dateStr = s.created_at ? new Date(s.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Hoy';
+
+        return `
+            <tr>
+                <td><small>${dateStr}</small></td>
+                <td>${studentText}</td>
+                <td><small>${escapeHtml(s.client_name || s.client_id)}</small></td>
+                <td><span class="badge">${escapeHtml(s.app_type || 'Doc')}</span></td>
+                <td><small>${escapeHtml(s.filename)}</small></td>
+                <td><small style="color:var(--text-muted);">${escapeHtml(s.notes || '-')}</small></td>
+                <td>
+                    <button class="btn btn-sm btn-primary" onclick="previewSubmission('${s.file_path}', '${escapeHtml(s.filename)}')">👁️ Ver</button>
+                    <a href="${s.file_path}" class="btn btn-sm btn-secondary" download="${escapeHtml(s.filename)}">⬇️</a>
+                    <button class="btn btn-sm btn-danger" onclick="deleteSubmissionRecord(${s.id})">🗑️</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function downloadAllSubmissionsZip() {
+    if (!viewingAssignmentId) return;
+    window.location.href = `/api/assignments/${viewingAssignmentId}/download-all`;
+}
+
+function previewSubmission(fileUrl, filename) {
+    const frame = document.getElementById('preview-iframe');
+    const pre = document.getElementById('preview-text');
+    const titleEl = document.getElementById('preview-title');
+    const downloadBtn = document.getElementById('preview-download-btn');
+
+    titleEl.textContent = `👁️ ${filename}`;
+    downloadBtn.href = fileUrl;
+    downloadBtn.download = filename;
+
+    if (filename.endsWith('.html') || filename.endsWith('.htm')) {
+        frame.style.display = 'block';
+        pre.style.display = 'none';
+        frame.src = fileUrl;
+    } else {
+        frame.style.display = 'none';
+        pre.style.display = 'block';
+        pre.textContent = 'Cargando contenido...';
+        fetch(fileUrl)
+            .then(res => res.text())
+            .then(txt => {
+                try {
+                    const parsed = JSON.parse(txt);
+                    pre.textContent = JSON.stringify(parsed, null, 2);
+                } catch(e) {
+                    pre.textContent = txt;
+                }
+            })
+            .catch(err => {
+                pre.textContent = 'No se pudo previsualizar el archivo.';
+            });
+    }
+
+    openModal('modal-preview');
+}
+
+async function deleteSubmissionRecord(id) {
+    if (!confirm('¿Eliminar esta entrega permanentemente?')) return;
+    try {
+        const res = await authFetch(`/api/submissions/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+            showNotification('Entrega eliminada.');
+            refreshCurrentSubmissions();
+            fetchAssignments();
+        }
+    } catch(err) {
+        console.error('Error eliminando entrega:', err);
+    }
+}
+

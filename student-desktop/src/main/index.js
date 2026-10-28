@@ -156,7 +156,101 @@ ipcMain.handle('files:saveLocal', (e, { filename, content }) => {
     return { success: true, filePath };
 });
 
-// Entregar archivo al profesor (Buzón de tareas)
+// Helper para consultas GET JSON al servidor LabDesk
+function httpGetJson(urlStr) {
+    return new Promise((resolve) => {
+        try {
+            const parsed = new URL(urlStr);
+            const req = http.request({
+                hostname: parsed.hostname,
+                port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+                path: parsed.pathname + (parsed.search || ''),
+                method: 'GET'
+            }, (res) => {
+                let body = '';
+                res.on('data', chunk => body += chunk);
+                res.on('end', () => {
+                    try { resolve(JSON.parse(body)); } catch(e) { resolve(null); }
+                });
+            });
+            req.on('error', () => resolve(null));
+            req.setTimeout(3500, () => { req.destroy(); resolve(null); });
+            req.end();
+        } catch(e) {
+            resolve(null);
+        }
+    });
+}
+
+// Consultar tarea activa desde la estación
+ipcMain.handle('turnIn:getActiveAssignment', async () => {
+    return await httpGetJson(agent.serverUrl + '/api/assignments/active');
+});
+
+// Consultar cursos disponibles
+ipcMain.handle('turnIn:getCourses', async () => {
+    return await httpGetJson(agent.serverUrl + '/api/courses') || [];
+});
+
+// Consultar estudiantes de un curso
+ipcMain.handle('turnIn:getStudents', async (e, courseId) => {
+    return await httpGetJson(agent.serverUrl + `/api/courses/${courseId}/students`) || [];
+});
+
+// Entregar tarea vinculada a una asignación (individual o grupal)
+ipcMain.handle('turnIn:submitAssignment', async (e, { assignmentId, filename, content, appType, courseName, studentNames, mainStudentName, notes }) => {
+    return new Promise((resolve) => {
+        try {
+            const boundary = '----LabDeskBoundary' + Math.random().toString(36).substring(2);
+            const endpoint = assignmentId
+                ? `${agent.serverUrl}/api/assignments/${assignmentId}/turn-in`
+                : `${agent.serverUrl}/api/turn-ins/upload`;
+            const serverUrl = new URL(endpoint);
+
+            const postData = [];
+            postData.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="clientId"\r\n\r\n${system.getMacAddress()}\r\n`));
+            postData.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="clientName"\r\n\r\n${system.getHostname()}\r\n`));
+            postData.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="courseName"\r\n\r\n${courseName || ''}\r\n`));
+            postData.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="studentNames"\r\n\r\n${JSON.stringify(studentNames || [])}\r\n`));
+            postData.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="mainStudentName"\r\n\r\n${mainStudentName || (studentNames && studentNames[0]) || 'Estudiante'}\r\n`));
+            postData.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="appType"\r\n\r\n${appType || 'documento'}\r\n`));
+            postData.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="notes"\r\n\r\n${notes || ''}\r\n`));
+            
+            // Archivo
+            postData.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: application/octet-stream\r\n\r\n`));
+            postData.push(Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf8'));
+            postData.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+            const fullBuffer = Buffer.concat(postData);
+
+            const req = http.request({
+                hostname: serverUrl.hostname,
+                port: serverUrl.port || (serverUrl.protocol === 'https:' ? 443 : 80),
+                path: serverUrl.pathname,
+                method: 'POST',
+                headers: {
+                    'Content-Type': `multipart/form-data; boundary=${boundary}`,
+                    'Content-Length': fullBuffer.length
+                }
+            }, (res) => {
+                let body = '';
+                res.on('data', chunk => body += chunk);
+                res.on('end', () => {
+                    try { resolve(JSON.parse(body)); } catch(e) { resolve({ success: true }); }
+                });
+            });
+
+            req.on('error', (err) => resolve({ success: false, error: err.message }));
+            req.setTimeout(10000, () => { req.destroy(); resolve({ success: false, error: 'Tiempo de espera agotado' }); });
+            req.write(fullBuffer);
+            req.end();
+        } catch(err) {
+            resolve({ success: false, error: err.message });
+        }
+    });
+});
+
+// Entregar archivo al profesor (Buzón de tareas legado / compatibilidad)
 ipcMain.handle('turnIn:submitFile', async (e, { filename, content, appType, studentName, notes }) => {
     return new Promise((resolve, reject) => {
         const boundary = '----LabDeskBoundary' + Math.random().toString(36).substring(2);

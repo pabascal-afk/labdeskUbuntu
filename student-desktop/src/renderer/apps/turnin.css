@@ -1,0 +1,234 @@
+/* LabDesk - Modal de Entrega de Tareas para Mini Editores */
+.turnin-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999999;
+    animation: turnInFadeIn 0.2s ease-out;
+}
+
+@keyframes turnInFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.turnin-card {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    width: 480px;
+    max-width: 95vw;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 20px rgba(59, 130, 246, 0.2);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    color: #f8fafc;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Color Emoji', sans-serif;
+}
+
+.turnin-header {
+    background: linear-gradient(135deg, #1e293b, #0f172a);
+    padding: 14px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #1e293b;
+}
+
+.turnin-header h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.turnin-close {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+.turnin-close:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.turnin-body {
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-height: 75vh;
+    overflow-y: auto;
+}
+
+/* Banner de Tarea Activa */
+.turnin-active-banner {
+    background: rgba(37, 99, 235, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.4);
+    border-radius: 8px;
+    padding: 10px 14px;
+}
+
+.turnin-active-badge {
+    font-size: 10px;
+    font-weight: 800;
+    color: #60a5fa;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.turnin-active-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #ffffff;
+    margin-bottom: 2px;
+}
+
+.turnin-active-meta {
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+/* Form Groups */
+.turnin-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.turnin-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #cbd5e1;
+}
+
+.turnin-select, .turnin-input {
+    background: #1e293b;
+    border: 1px solid #334155;
+    color: #f8fafc;
+    padding: 9px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s;
+    width: 100%;
+}
+
+.turnin-select:focus, .turnin-input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+
+.turnin-group-box {
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.turnin-chips-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.turnin-chip {
+    background: #1e293b;
+    border: 1px solid #3b82f6;
+    color: #e2e8f0;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.turnin-chip-remove {
+    background: transparent;
+    border: none;
+    color: #ef4444;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 0;
+    line-height: 1;
+}
+.turnin-chip-remove:hover {
+    color: #f87171;
+}
+
+.turnin-footer {
+    background: #0b1120;
+    padding: 12px 18px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+    border-top: 1px solid #1e293b;
+}
+
+.turnin-btn {
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.turnin-btn-secondary {
+    background: #334155;
+    color: #f1f5f9;
+}
+.turnin-btn-secondary:hover {
+    background: #475569;
+}
+
+.turnin-btn-success {
+    background: #10b981;
+    color: white;
+}
+.turnin-btn-success:hover {
+    background: #059669;
+}
+.turnin-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.turnin-alert {
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    text-align: center;
+}
+.turnin-alert-success {
+    background: rgba(16, 185, 129, 0.2);
+    border: 1px solid #10b981;
+    color: #6ee7b7;
+}
+.turnin-alert-error {
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid #ef4444;
+    color: #fca5a5;
+}

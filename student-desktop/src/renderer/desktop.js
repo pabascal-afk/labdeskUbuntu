@@ -606,6 +606,71 @@ function initRemoteListeners() {
     window.labdeskAPI.system.onAnnouncement((msg) => {
         showTeacherAnnouncement(msg);
     });
+
+    // Escuchar Asignación de Tareas en Tiempo Real
+    if (window.labdeskAPI.turnIn && window.labdeskAPI.turnIn.onActiveAssignmentChanged) {
+        window.labdeskAPI.turnIn.onActiveAssignmentChanged((assignment) => {
+            updateActiveAssignmentUI(assignment);
+        });
+
+        // Comprobación inicial de tarea activa
+        window.labdeskAPI.turnIn.getActiveAssignment().then(data => {
+            if (data && data.active && data.assignment) {
+                updateActiveAssignmentUI(data.assignment);
+            } else {
+                updateActiveAssignmentUI(null);
+            }
+        }).catch(() => {});
+    }
+}
+
+// ==========================================
+// TAREA ASIGNADA ACTIVA EN EL ESCRITORIO
+// ==========================================
+let currentActiveAssignment = null;
+
+function updateActiveAssignmentUI(assignment) {
+    currentActiveAssignment = assignment;
+    const card = document.getElementById('active-assignment-card');
+    if (!card) return;
+
+    if (!assignment) {
+        card.style.display = 'none';
+        return;
+    }
+
+    card.style.display = 'block';
+    document.getElementById('assignment-card-title').textContent = assignment.title;
+    document.getElementById('assignment-card-teacher').textContent = `👨‍🏫 ${assignment.teacher_name || 'Profesor'}`;
+    document.getElementById('assignment-card-course').textContent = `🏫 ${assignment.course_name || 'Curso'}`;
+    document.getElementById('assignment-card-mode').textContent = assignment.is_group ? `👥 Grupal (Máx. ${assignment.max_group_size || 4})` : '👤 Individual';
+    document.getElementById('assignment-card-instructions').textContent = assignment.instructions || 'Sin instrucciones adicionales.';
+
+    const appBtn = document.getElementById('btn-assignment-open-app');
+    const appType = (assignment.app_type || 'any').toLowerCase();
+    if (appType === 'writer') {
+        appBtn.textContent = '🚀 Abrir Mini Writer';
+    } else if (appType === 'calc') {
+        appBtn.textContent = '🚀 Abrir Mini Calc';
+    } else if (appType === 'slides') {
+        appBtn.textContent = '🚀 Abrir Mini Slides';
+    } else {
+        appBtn.textContent = '🚀 Abrir Editor de Trabajo';
+    }
+}
+
+function openAssignmentApp() {
+    if (!currentActiveAssignment) return;
+    const appType = (currentActiveAssignment.app_type || 'writer').toLowerCase();
+    if (appType === 'calc') openApp('calc');
+    else if (appType === 'slides') openApp('slides');
+    else openApp('writer');
+}
+
+function toggleAssignmentCollapse() {
+    const content = document.getElementById('assignment-card-content');
+    if (!content) return;
+    content.style.display = content.style.display === 'none' ? 'block' : 'none';
 }
 
 function showTeacherAnnouncement(msg) {

@@ -21,6 +21,11 @@ server/public/uploads/turn_ins/*
 !server/public/uploads/turn_ins/.gitkeep
 server/public/uploads/branding/*
 !server/public/uploads/branding/.gitkeep
+server/public/uploads/submissions/*
+!server/public/uploads/submissions/.gitkeep
+
+# Scratch
+scratch/
 
 # Environment files
 .env
