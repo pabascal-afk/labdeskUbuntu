@@ -1074,6 +1074,10 @@ app.post('/api/assignments', requireAuth(), uploadTemplate.single('template_file
         templateFilename = req.file.originalname;
     }
 
+    const isGroupVal = (is_group === '1' || is_group === 1 || is_group === 'true' || is_group === true) ? 1 : 0;
+    const strictModeVal = (strict_mode === '1' || strict_mode === 1 || strict_mode === 'true' || strict_mode === true) ? 1 : 0;
+    const autoSubmitVal = (allow_auto_submit === '0' || allow_auto_submit === 0 || allow_auto_submit === 'false' || allow_auto_submit === false) ? 0 : 1;
+
     db.run(`INSERT INTO assignments (user_id, folder_id, course_id, title, instructions, app_type, is_group, max_group_size, status, template_file_path, template_filename, duration_minutes, strict_mode, allow_auto_submit)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?)`,
         [
@@ -1083,13 +1087,13 @@ app.post('/api/assignments', requireAuth(), uploadTemplate.single('template_file
             title.trim(),
             instructions || '',
             app_type || 'any',
-            is_group ? 1 : 0,
+            isGroupVal,
             max_group_size || 4,
             templateFilePath,
             templateFilename,
             parseInt(duration_minutes, 10) || 0,
-            strict_mode ? 1 : 0,
-            allow_auto_submit !== undefined ? (allow_auto_submit ? 1 : 0) : 1
+            strictModeVal,
+            autoSubmitVal
         ],
         function(err) {
             if (err) return res.status(500).json({ error: err.message });
@@ -1108,8 +1112,12 @@ app.put('/api/assignments/:id', requireAuth(), uploadTemplate.single('template_f
         templateFilename = req.file.originalname;
     }
 
+    const isGroupVal = is_group !== undefined ? ((is_group === '1' || is_group === 1 || is_group === 'true' || is_group === true) ? 1 : 0) : null;
+    const strictModeVal = strict_mode !== undefined ? ((strict_mode === '1' || strict_mode === 1 || strict_mode === 'true' || strict_mode === true) ? 1 : 0) : null;
+    const autoSubmitVal = allow_auto_submit !== undefined ? ((allow_auto_submit === '0' || allow_auto_submit === 0 || allow_auto_submit === 'false' || allow_auto_submit === false) ? 0 : 1) : null;
+
     db.run(`UPDATE assignments SET
-            folder_id = COALESCE(?, folder_id),
+            folder_id = ?,
             course_id = COALESCE(?, course_id),
             title = COALESCE(?, title),
             instructions = COALESCE(?, instructions),
@@ -1123,22 +1131,30 @@ app.put('/api/assignments/:id', requireAuth(), uploadTemplate.single('template_f
             template_filename = COALESCE(?, template_filename)
             WHERE id = ?`,
         [
-            folder_id,
+            folder_id || null,
             course_id,
-            title,
-            instructions,
+            title ? title.trim() : null,
+            instructions !== undefined ? instructions : null,
             app_type,
-            is_group !== undefined ? (is_group ? 1 : 0) : null,
-            max_group_size,
+            isGroupVal,
+            max_group_size ? parseInt(max_group_size, 10) : null,
             duration_minutes !== undefined ? parseInt(duration_minutes, 10) : null,
-            strict_mode !== undefined ? (strict_mode ? 1 : 0) : null,
-            allow_auto_submit !== undefined ? (allow_auto_submit ? 1 : 0) : null,
+            strictModeVal,
+            autoSubmitVal,
             templateFilePath,
             templateFilename,
             req.params.id
         ],
         (err) => {
             if (err) return res.status(500).json({ error: err.message });
+
+            // Si la tarea editada es la activa, actualizarla para las estaciones en tiempo real
+            getActiveAssignmentDetails((detErr, activeData) => {
+                if (activeData && activeData.id === parseInt(req.params.id, 10)) {
+                    io.emit('active_assignment_updated', activeData);
+                }
+            });
+
             res.json({ success: true });
         }
     );

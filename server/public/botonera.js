@@ -847,15 +847,93 @@ function toggleBotoneraAssignmentForm(show) {
 
     form.style.display = willShow ? 'block' : 'none';
     if (willShow) {
+        const titleEl = document.getElementById('botonera-assign-form-title');
+        if (titleEl) titleEl.textContent = '✨ Nueva Asignación para la Sala';
         document.getElementById('botonera-assign-id').value = '';
         document.getElementById('b-assign-title').value = '';
         document.getElementById('b-assign-instructions').value = '';
+        document.getElementById('b-assign-course').value = '';
+        document.getElementById('b-assign-app').value = 'any';
+        document.getElementById('b-assign-duration').value = '0';
+        toggleBotoneraCustomDuration('0');
+        const custDur = document.getElementById('b-assign-duration-custom');
+        if (custDur) custDur.value = '';
         document.getElementById('b-assign-group-check').checked = false;
         document.getElementById('b-assign-group-wrap').style.display = 'none';
+        document.getElementById('b-assign-max-group').value = '4';
+        document.getElementById('b-assign-strict-check').checked = false;
+        const fileInput = document.getElementById('b-assign-template-file');
+        if (fileInput) fileInput.value = '';
+        const tmplInfo = document.getElementById('b-assign-current-template-info');
+        if (tmplInfo) {
+            tmplInfo.style.display = 'none';
+            tmplInfo.textContent = '';
+        }
         if (botoneraSelectedFolderId) {
             document.getElementById('b-assign-folder').value = botoneraSelectedFolderId;
+        } else {
+            document.getElementById('b-assign-folder').value = '';
         }
         document.getElementById('b-assign-title').focus();
+    }
+}
+
+function editBotoneraAssignment(id) {
+    const a = (botoneraAssignments || []).find(item => item.id === id);
+    if (!a) return;
+
+    toggleBotoneraAssignmentForm(true);
+
+    const titleEl = document.getElementById('botonera-assign-form-title');
+    if (titleEl) titleEl.textContent = '✏️ Editar Tarea: ' + (a.title || '');
+
+    document.getElementById('botonera-assign-id').value = a.id;
+    document.getElementById('b-assign-title').value = a.title || '';
+    document.getElementById('b-assign-course').value = a.course_id || '';
+    document.getElementById('b-assign-folder').value = a.folder_id || '';
+    document.getElementById('b-assign-app').value = a.app_type || 'any';
+
+    const dur = a.duration_minutes || 0;
+    const durSelect = document.getElementById('b-assign-duration');
+    const standardDurations = ['0', '15', '30', '45', '60'];
+    if (standardDurations.includes(String(dur))) {
+        durSelect.value = String(dur);
+        toggleBotoneraCustomDuration(String(dur));
+    } else {
+        durSelect.value = 'custom';
+        toggleBotoneraCustomDuration('custom');
+        const custDur = document.getElementById('b-assign-duration-custom');
+        if (custDur) custDur.value = dur;
+    }
+
+    const isGroup = !!(a.is_group === 1 || a.is_group === '1' || a.is_group === true || a.is_group === 'true');
+    const groupCheck = document.getElementById('b-assign-group-check');
+    groupCheck.checked = isGroup;
+    document.getElementById('b-assign-group-wrap').style.display = isGroup ? 'block' : 'none';
+    document.getElementById('b-assign-max-group').value = a.max_group_size || 4;
+
+    const isStrict = !!(a.strict_mode === 1 || a.strict_mode === '1' || a.strict_mode === true || a.strict_mode === 'true');
+    document.getElementById('b-assign-strict-check').checked = isStrict;
+
+    document.getElementById('b-assign-instructions').value = a.instructions || '';
+
+    const fileInput = document.getElementById('b-assign-template-file');
+    if (fileInput) fileInput.value = '';
+
+    const tmplInfo = document.getElementById('b-assign-current-template-info');
+    if (tmplInfo) {
+        if (a.template_filename) {
+            tmplInfo.style.display = 'block';
+            tmplInfo.textContent = `Plantilla actual: ${a.template_filename} (sube un archivo si deseas reemplazarla)`;
+        } else {
+            tmplInfo.style.display = 'none';
+            tmplInfo.textContent = '';
+        }
+    }
+
+    const form = document.getElementById('botonera-assign-form');
+    if (form) {
+        form.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 }
 
@@ -916,7 +994,8 @@ function renderBotoneraAssignmentsCards() {
                             ${a.folder_name ? `<span>📁 ${escapeHtml(a.folder_name)}</span>` : ''}
                         </div>
                     </div>
-                    <div>
+                    <div style="display:flex; gap:4px;">
+                        <button class="btn-action" style="padding:2px 8px; font-size:12px;" onclick="editBotoneraAssignment(${a.id})" title="Editar Tarea">✏️</button>
                         <button class="btn-botonera-del" onclick="deleteBotoneraAssignment(${a.id})" title="Eliminar Tarea">🗑️</button>
                     </div>
                 </div>

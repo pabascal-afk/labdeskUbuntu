@@ -1703,15 +1703,93 @@ function toggleAssignmentForm(show) {
 
     formCard.style.display = willShow ? 'block' : 'none';
     if (willShow) {
+        const titleEl = document.getElementById('assignment-form-title');
+        if (titleEl) titleEl.textContent = '✨ Crear Nueva Tarea';
         document.getElementById('assignment-edit-id').value = '';
         document.getElementById('assign-title').value = '';
         document.getElementById('assign-instructions').value = '';
+        document.getElementById('assign-course').value = '';
+        document.getElementById('assign-app').value = 'any';
+        document.getElementById('assign-duration').value = '0';
+        toggleCustomDuration('0');
+        const custDur = document.getElementById('assign-duration-custom');
+        if (custDur) custDur.value = '';
         document.getElementById('assign-group-check').checked = false;
         document.getElementById('assign-group-size-wrap').style.display = 'none';
+        document.getElementById('assign-max-group').value = '4';
+        document.getElementById('assign-strict-check').checked = false;
+        const fileInput = document.getElementById('assign-template-file');
+        if (fileInput) fileInput.value = '';
+        const tmplInfo = document.getElementById('assign-current-template-info');
+        if (tmplInfo) {
+            tmplInfo.style.display = 'none';
+            tmplInfo.textContent = '';
+        }
         if (selectedFolderId) {
             document.getElementById('assign-folder').value = selectedFolderId;
+        } else {
+            document.getElementById('assign-folder').value = '';
         }
         document.getElementById('assign-title').focus();
+    }
+}
+
+function editAssignment(id) {
+    const a = (currentAssignments || []).find(item => item.id === id);
+    if (!a) return;
+
+    toggleAssignmentForm(true);
+
+    const titleEl = document.getElementById('assignment-form-title');
+    if (titleEl) titleEl.textContent = '✏️ Editar Tarea: ' + (a.title || '');
+
+    document.getElementById('assignment-edit-id').value = a.id;
+    document.getElementById('assign-title').value = a.title || '';
+    document.getElementById('assign-course').value = a.course_id || '';
+    document.getElementById('assign-folder').value = a.folder_id || '';
+    document.getElementById('assign-app').value = a.app_type || 'any';
+
+    const dur = a.duration_minutes || 0;
+    const durSelect = document.getElementById('assign-duration');
+    const standardDurations = ['0', '15', '30', '45', '60'];
+    if (standardDurations.includes(String(dur))) {
+        durSelect.value = String(dur);
+        toggleCustomDuration(String(dur));
+    } else {
+        durSelect.value = 'custom';
+        toggleCustomDuration('custom');
+        const custDur = document.getElementById('assign-duration-custom');
+        if (custDur) custDur.value = dur;
+    }
+
+    const isGroup = !!(a.is_group === 1 || a.is_group === '1' || a.is_group === true || a.is_group === 'true');
+    const groupCheck = document.getElementById('assign-group-check');
+    groupCheck.checked = isGroup;
+    document.getElementById('assign-group-size-wrap').style.display = isGroup ? 'block' : 'none';
+    document.getElementById('assign-max-group').value = a.max_group_size || 4;
+
+    const isStrict = !!(a.strict_mode === 1 || a.strict_mode === '1' || a.strict_mode === true || a.strict_mode === 'true');
+    document.getElementById('assign-strict-check').checked = isStrict;
+
+    document.getElementById('assign-instructions').value = a.instructions || '';
+
+    const fileInput = document.getElementById('assign-template-file');
+    if (fileInput) fileInput.value = '';
+
+    const tmplInfo = document.getElementById('assign-current-template-info');
+    if (tmplInfo) {
+        if (a.template_filename) {
+            tmplInfo.style.display = 'block';
+            tmplInfo.textContent = `Plantilla actual: ${a.template_filename} (sube otro archivo si deseas reemplazarla)`;
+        } else {
+            tmplInfo.style.display = 'none';
+            tmplInfo.textContent = '';
+        }
+    }
+
+    const formCard = document.getElementById('assignment-form-card');
+    if (formCard) {
+        formCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 }
 
@@ -1772,7 +1850,8 @@ function renderAssignmentsCards() {
                             ${a.folder_name ? `<span>📁 ${escapeHtml(a.folder_name)}</span>` : ''}
                         </div>
                     </div>
-                    <div>
+                    <div style="display:flex; gap:4px;">
+                        <button class="btn btn-sm btn-secondary" onclick="editAssignment(${a.id})" title="Editar Tarea" style="padding:2px 8px;">✏️</button>
                         <button class="btn btn-sm btn-danger" onclick="deleteAssignment(${a.id})" title="Eliminar Tarea" style="padding:2px 8px;">🗑️</button>
                     </div>
                 </div>

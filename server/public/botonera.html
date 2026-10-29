@@ -479,7 +479,7 @@
 
                     <!-- Formulario Desplegable para Crear Tarea -->
                     <div id="botonera-assign-form" style="display:none; background:#0b1120; border:1px solid #27364d; border-radius:8px; padding:12px; margin-bottom:10px;">
-                        <h5 style="margin:0 0 10px 0; font-size:13px; color:var(--led-blue);">✨ Nueva Asignación para la Sala</h5>
+                        <h5 id="botonera-assign-form-title" style="margin:0 0 10px 0; font-size:13px; color:var(--led-blue);">✨ Nueva Asignación para la Sala</h5>
                         <input type="hidden" id="botonera-assign-id" value="">
 
                         <div style="display:grid; grid-template-columns: 2fr 1fr; gap:8px;">
@@ -540,6 +540,7 @@
                             <div class="field-group">
                                 <label style="font-size:11px;">📁 Plantilla de Inicio (Opcional - .html, .calc.json, .slides.json):</label>
                                 <input type="file" id="b-assign-template-file" class="input-console" style="padding:4px 6px; font-size:11px;" accept=".html,.json,.calc.json,.slides.json,.txt">
+                                <span id="b-assign-current-template-info" style="font-size:10px; color:#10b981; display:none; margin-top:2px;"></span>
                             </div>
                             <div class="field-group">
                                 <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:11px; margin-bottom:6px;">
