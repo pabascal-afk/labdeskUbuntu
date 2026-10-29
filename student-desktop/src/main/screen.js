@@ -6,6 +6,7 @@ class ScreenCapture {
         this.interval = 2500;
         this.timer = null;
         this.isCapturing = true;
+        this.isStreaming = false;
         this.onFrameCallback = null;
     }
 
@@ -29,13 +30,17 @@ class ScreenCapture {
             const primaryDisplay = screen.getPrimaryDisplay();
             const { width, height } = primaryDisplay.size;
 
+            // En modo stream interactivo (RDP docente), aumentamos resolución a 85% y calidad para máxima nitidez
+            const scale = this.isStreaming ? 0.85 : 0.4;
+            const quality = this.isStreaming ? 75 : 65;
+
             const sources = await desktopCapturer.getSources({
                 types: ['screen'],
-                thumbnailSize: { width: Math.round(width * 0.4), height: Math.round(height * 0.4) }
+                thumbnailSize: { width: Math.round(width * scale), height: Math.round(height * scale) }
             });
 
             if (sources.length > 0 && this.onFrameCallback) {
-                const jpegBuffer = sources[0].thumbnail.toJPEG(65);
+                const jpegBuffer = sources[0].thumbnail.toJPEG(quality);
                 const base64 = jpegBuffer.toString('base64');
                 this.onFrameCallback(base64);
             }
@@ -47,7 +52,11 @@ class ScreenCapture {
     }
 
     setStreamingMode(isLive) {
-        this.interval = isLive ? 1000 : 2500;
+        this.isStreaming = !!isLive;
+        this.interval = isLive ? 800 : 2500;
+        if (isLive) {
+            this.scheduleNext();
+        }
     }
 
     pause() {

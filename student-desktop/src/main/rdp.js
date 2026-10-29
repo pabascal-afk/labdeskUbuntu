@@ -30,6 +30,11 @@ class LinuxRdpInput {
                 const py = Math.round(data.y * height);
                 const btn = data.button === 'right' ? 3 : (data.button === 'middle' ? 2 : 1);
                 exec(`xdotool mousemove ${px} ${py} click ${btn}`);
+            } else if (data.type === 'dblclick') {
+                const px = Math.round(data.x * width);
+                const py = Math.round(data.y * height);
+                const btn = data.button === 'right' ? 3 : 1;
+                exec(`xdotool mousemove ${px} ${py} click --repeat 2 --delay 100 ${btn}`);
             } else if (data.type === 'scroll') {
                 const dir = data.delta > 0 ? 5 : 4; // 4 = scroll up, 5 = scroll down
                 exec(`xdotool click ${dir}`);

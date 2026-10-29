@@ -356,14 +356,29 @@
     <div id="modal-rdp" class="modal">
         <div class="modal-content modal-fullscreen">
             <div class="modal-header">
-                <h3 id="rdp-title">🖥️ Control Remoto</h3>
-                <div class="rdp-header-actions">
-                    <button class="btn btn-sm btn-secondary" id="btn-rdp-refresh">Actualizar Captura</button>
-                    <button class="btn-close" onclick="closeRdp()">&times;</button>
+                <div class="rdp-title-wrap" style="display:flex; align-items:center; gap:0.75rem;">
+                    <h3 id="rdp-title" style="margin:0; font-size:1.15rem;">🖥️ Control Remoto</h3>
+                    <span id="rdp-stream-badge" class="badge badge-success" style="font-size:0.75rem; padding:0.25rem 0.5rem; display:inline-flex; align-items:center; gap:0.35rem;">
+                        <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#22c55e;"></span>
+                        En Vivo
+                    </span>
+                    <span id="rdp-res-badge" class="badge" style="background:#334155; color:#cbd5e1; font-size:0.75rem; font-family:monospace;">--×--</span>
+                </div>
+                <div class="rdp-header-actions" style="display:flex; align-items:center; gap:0.5rem;">
+                    <button class="btn btn-sm btn-secondary" id="btn-rdp-lock" title="Bloquear o desbloquear este equipo" onclick="toggleRdpClientLock()">🔒 Bloquear</button>
+                    <button class="btn btn-sm btn-secondary" id="btn-rdp-refresh" title="Refrescar captura inmediatamente">🔄 Refrescar</button>
+                    <button class="btn btn-sm btn-secondary" id="btn-rdp-fullscreen" title="Pantalla completa" onclick="toggleRdpFullscreen()">⛶ Maximizar</button>
+                    <button class="btn-close" onclick="closeRdp()" title="Cerrar control remoto">&times;</button>
                 </div>
             </div>
-            <div class="modal-body rdp-canvas-container">
-                <img id="rdp-screen-img" class="rdp-screen" alt="Pantalla remota">
+            <div id="rdp-container" class="modal-body rdp-canvas-container">
+                <img id="rdp-screen-img" class="rdp-screen" alt="Pantalla remota" draggable="false">
+            </div>
+            <div id="rdp-status-bar" class="rdp-status-bar">
+                <div class="rdp-help-hints">
+                    <span>🖱️ <strong>Clic Izq:</strong> Acción | <strong>Clic Der:</strong> Menú | <strong>Doble Clic:</strong> Abrir | <strong>Rueda:</strong> Scroll</span>
+                </div>
+                <div id="rdp-coords" style="font-family:monospace; color:#38bdf8; font-weight:600;">X: --, Y: --</div>
             </div>
         </div>
     </div>

@@ -1032,26 +1032,255 @@ async function sendPowerAction(action) {
 }
 
 // ==========================================
-// RDP (CONTROL REMOTO)
+// RDP (CONTROL REMOTO INTERACTIVO Y EXPANDIBLE)
 // ==========================================
+let rdpResizeObserver = null;
+let currentRdpClientIsLocked = false;
+
+function fitRdpScreen() {
+    const container = document.getElementById('rdp-container') || document.querySelector('.rdp-canvas-container');
+    const img = document.getElementById('rdp-screen-img');
+    if (!container || !img) return;
+
+    const nw = img.naturalWidth;
+    const nh = img.naturalHeight;
+    if (!nw || !nh) return;
+
+    // Actualizar badge de resolución
+    const resBadge = document.getElementById('rdp-res-badge');
+    if (resBadge) {
+        resBadge.textContent = `${nw}×${nh}`;
+    }
+
+    const cw = container.clientWidth;
+    const ch = container.clientHeight;
+    if (cw <= 0 || ch <= 0) return;
+
+    const imgAspect = nw / nh;
+    const containerAspect = cw / ch;
+
+    let targetW, targetH;
+    if (containerAspect > imgAspect) {
+        // Contenedor proporcionalmente más ancho: ajustar por alto
+        targetH = ch;
+        targetW = Math.round(ch * imgAspect);
+    } else {
+        // Contenedor proporcionalmente más alto: ajustar por ancho
+        targetW = cw;
+        targetH = Math.round(cw / imgAspect);
+    }
+
+    img.style.width = targetW + 'px';
+    img.style.height = targetH + 'px';
+    img.style.maxWidth = 'none';
+    img.style.maxHeight = 'none';
+}
+
+function getRdpCoordinates(e, img) {
+    const rect = img.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    const rawX = (e.clientX - rect.left) / rect.width;
+    const rawY = (e.clientY - rect.top) / rect.height;
+    const x = Math.max(0, Math.min(1, rawX));
+    const y = Math.max(0, Math.min(1, rawY));
+    return { x, y, rect };
+}
+
+function toggleRdpFullscreen() {
+    const modalContent = document.querySelector('#modal-rdp .modal-content');
+    const btn = document.getElementById('btn-rdp-fullscreen');
+    if (!document.fullscreenElement) {
+        if (modalContent.requestFullscreen) {
+            modalContent.requestFullscreen();
+        } else if (modalContent.webkitRequestFullscreen) {
+            modalContent.webkitRequestFullscreen();
+        }
+        if (btn) btn.innerHTML = '⛶ Restaurar';
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+        }
+        if (btn) btn.innerHTML = '⛶ Maximizar';
+    }
+}
+
+document.addEventListener('fullscreenchange', () => {
+    const btn = document.getElementById('btn-rdp-fullscreen');
+    if (btn) {
+        btn.innerHTML = document.fullscreenElement ? '⛶ Restaurar' : '⛶ Maximizar';
+    }
+    setTimeout(fitRdpScreen, 60);
+});
+
+function toggleRdpClientLock() {
+    if (!currentActiveRdpClientId) return;
+    currentRdpClientIsLocked = !currentRdpClientIsLocked;
+    const lockBtn = document.getElementById('btn-rdp-lock');
+    if (lockBtn) {
+        lockBtn.textContent = currentRdpClientIsLocked ? '🔓 Desbloquear' : '🔒 Bloquear';
+    }
+    sendCommand(currentActiveRdpClientId, currentRdpClientIsLocked ? 'lock' : 'unlock');
+}
+
 function openRdp(clientId, clientName) {
     currentActiveRdpClientId = clientId;
-    document.getElementById('rdp-title').textContent = `🖥️ Control Remoto: ${clientName}`;
+    const titleEl = document.getElementById('rdp-title');
+    if (titleEl) titleEl.textContent = `🖥️ Control Remoto: ${clientName}`;
+
+    // Obtener estado actual del cliente si existe
+    const client = currentClients.find(c => c.id === clientId);
+    currentRdpClientIsLocked = client ? (client.is_locked === 1) : false;
+    const lockBtn = document.getElementById('btn-rdp-lock');
+    if (lockBtn) {
+        lockBtn.textContent = currentRdpClientIsLocked ? '🔓 Desbloquear' : '🔒 Bloquear';
+    }
+
     const rdpImg = document.getElementById('rdp-screen-img');
+    const container = document.getElementById('rdp-container') || document.querySelector('.rdp-canvas-container');
+
+    // Resetear dimensiones previas
+    rdpImg.style.width = 'auto';
+    rdpImg.style.height = 'auto';
     rdpImg.src = `/api/clients/${clientId}/screenshot?t=${Date.now()}`;
-    
-    // Configurar listeners de ratón en el lienzo
-    rdpImg.onclick = (e) => {
-        const rect = rdpImg.getBoundingClientRect();
-        const x = (e.clientX - rect.left) / rect.width;
-        const y = (e.clientY - rect.top) / rect.height;
-        socket.emit('rdp_input', { clientId, type: 'click', button: 'left', x, y });
+
+    // Listener de carga para auto-ajustar al tamaño del modal
+    rdpImg.onload = () => {
+        fitRdpScreen();
     };
 
+    // Configurar listeners de ratón en el lienzo con máxima precisión
+    rdpImg.onclick = (e) => {
+        if (!currentActiveRdpClientId) return;
+        const coords = getRdpCoordinates(e, rdpImg);
+        if (!coords) return;
+        socket.emit('rdp_input', {
+            clientId: currentActiveRdpClientId,
+            type: 'click',
+            button: 'left',
+            x: coords.x,
+            y: coords.y
+        });
+    };
+
+    rdpImg.oncontextmenu = (e) => {
+        e.preventDefault();
+        if (!currentActiveRdpClientId) return;
+        const coords = getRdpCoordinates(e, rdpImg);
+        if (!coords) return;
+        socket.emit('rdp_input', {
+            clientId: currentActiveRdpClientId,
+            type: 'click',
+            button: 'right',
+            x: coords.x,
+            y: coords.y
+        });
+    };
+
+    rdpImg.ondblclick = (e) => {
+        if (!currentActiveRdpClientId) return;
+        const coords = getRdpCoordinates(e, rdpImg);
+        if (!coords) return;
+        socket.emit('rdp_input', {
+            clientId: currentActiveRdpClientId,
+            type: 'dblclick',
+            button: 'left',
+            x: coords.x,
+            y: coords.y
+        });
+    };
+
+    rdpImg.onwheel = (e) => {
+        e.preventDefault();
+        if (!currentActiveRdpClientId) return;
+        socket.emit('rdp_input', {
+            clientId: currentActiveRdpClientId,
+            type: 'scroll',
+            delta: e.deltaY
+        });
+    };
+
+    rdpImg.onmousemove = (e) => {
+        const coords = getRdpCoordinates(e, rdpImg);
+        if (!coords) return;
+        const nw = rdpImg.naturalWidth || 0;
+        const nh = rdpImg.naturalHeight || 0;
+        const px = Math.round(coords.x * nw);
+        const py = Math.round(coords.y * nh);
+        const coordsElem = document.getElementById('rdp-coords');
+        if (coordsElem) {
+            coordsElem.textContent = `X: ${px}, Y: ${py} (${Math.round(coords.x * 100)}%, ${Math.round(coords.y * 100)}%)`;
+        }
+    };
+
+    rdpImg.onmouseleave = () => {
+        const coordsElem = document.getElementById('rdp-coords');
+        if (coordsElem) coordsElem.textContent = `X: --, Y: --`;
+    };
+
+    // Botón refrescar
+    const btnRefresh = document.getElementById('btn-rdp-refresh');
+    if (btnRefresh) {
+        btnRefresh.onclick = () => {
+            if (!currentActiveRdpClientId) return;
+            rdpImg.src = `/api/clients/${currentActiveRdpClientId}/screenshot?t=${Date.now()}`;
+            socket.emit('system_command', { clientId: currentActiveRdpClientId, command: 'start_live_stream' });
+        };
+    }
+
+    // Abrir modal
     openModal('modal-rdp');
+
+    // Observador de cambio de tamaño del contenedor
+    if (window.ResizeObserver && container) {
+        if (rdpResizeObserver) rdpResizeObserver.disconnect();
+        rdpResizeObserver = new ResizeObserver(() => {
+            fitRdpScreen();
+        });
+        rdpResizeObserver.observe(container);
+    }
+    window.addEventListener('resize', fitRdpScreen);
+
+    // Ajustar en los siguientes frames tras renderizado modal
+    requestAnimationFrame(() => {
+        fitRdpScreen();
+        setTimeout(fitRdpScreen, 50);
+        setTimeout(fitRdpScreen, 150);
+        setTimeout(fitRdpScreen, 300);
+    });
+
+    // Activar modo stream de alta resolución en el cliente
+    socket.emit('system_command', { clientId, command: 'start_live_stream' });
+    fetch(`/api/clients/${clientId}/command`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: 'start_live_stream' })
+    }).catch(() => {});
 }
 
 function closeRdp() {
+    if (currentActiveRdpClientId) {
+        const clientId = currentActiveRdpClientId;
+        // Notificar al cliente que vuelva a modo normal de bajo consumo
+        socket.emit('system_command', { clientId, command: 'stop_live_stream' });
+        fetch(`/api/clients/${clientId}/command`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: 'stop_live_stream' })
+        }).catch(() => {});
+    }
+
+    if (rdpResizeObserver) {
+        rdpResizeObserver.disconnect();
+        rdpResizeObserver = null;
+    }
+    window.removeEventListener('resize', fitRdpScreen);
+
+    if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+    }
+
     currentActiveRdpClientId = null;
     closeModal('modal-rdp');
 }

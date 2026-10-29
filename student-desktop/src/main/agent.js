@@ -95,6 +95,7 @@ class LabDeskAgent {
 
         this.socket.on('disconnect', () => {
             console.log('⚠️ Desconectado del servidor LabDesk');
+            screenCapture.setStreamingMode(false);
             this.sendToRenderer('server_connection_changed', { connected: false });
         });
 
