@@ -150,6 +150,42 @@ body, html {
     pointer-events: auto;
     min-width: 400px;
     min-height: 250px;
+    transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.window.active-window {
+    box-shadow: 0 25px 35px -5px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(96, 165, 250, 0.4);
+    border-color: rgba(96, 165, 250, 0.5);
+}
+
+.window.active-window .window-header {
+    background: #1e293b;
+    border-bottom-color: rgba(96, 165, 250, 0.3);
+}
+
+.window-glass {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: none;
+    background: transparent;
+    cursor: default;
+}
+
+/* En ventanas inactivas en segundo plano, el glass captura el clic para traerla al frente de inmediato */
+.window:not(.active-window) .window-glass {
+    display: block;
+    pointer-events: auto;
+}
+
+/* Durante el arrastre de cualquier ventana, ningún iframe puede capturar eventos del puntero */
+body.is-dragging-window iframe {
+    pointer-events: none !important;
+}
+
+body.is-dragging-window {
+    user-select: none !important;
+    cursor: move !important;
 }
 
 .window-header {

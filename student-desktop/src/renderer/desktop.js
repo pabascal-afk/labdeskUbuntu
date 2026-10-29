@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initAudioControls();
     initStartMenu();
     initRemoteListeners();
+    initGlobalDragManager();
 });
 
 // ==========================================
@@ -291,10 +292,12 @@ function updateExternalBrowserTaskbar(state) {
                     // Minimizar ventanas internas de LabDesk para ver el navegador estándar
                     openWindows.forEach((wData, wId) => {
                         wData.element.style.display = 'none';
+                        wData.element.classList.remove('active-window');
                         const tItem = document.querySelector(`.taskbar-item[data-win-id="${wId}"]`);
                         if (tItem) tItem.classList.remove('active');
                     });
                     activeInternalWinId = null;
+                    syncBrowserBounds();
                     window.labdeskAPI.browser.focusExternal();
                 }
             };
@@ -366,7 +369,7 @@ function openGoogleApp(googleUrl) {
 function createWindowElement(winId, meta, initialUrl) {
     const container = document.getElementById('windows-container');
     const win = document.createElement('div');
-    win.className = 'window';
+    win.className = 'window active-window';
     win.id = winId;
     win.style.width = `${meta.w}px`;
     win.style.height = `${meta.h}px`;
@@ -388,12 +391,30 @@ function createWindowElement(winId, meta, initialUrl) {
         </div>
         <div class="window-body">
             <iframe class="window-iframe" src="${initialUrl || meta.url}"></iframe>
+            <div class="window-glass" title="Haz clic para activar esta ventana"></div>
         </div>
     `;
 
-    win.querySelector('.win-btn-close').onclick = () => closeWindow(winId);
-    win.querySelector('.win-btn-min').onclick = () => minimizeWindow(winId);
-    win.querySelector('.win-btn-max').onclick = () => toggleMaximizeWindow(winId);
+    win.querySelector('.win-btn-close').onclick = (e) => {
+        e.stopPropagation();
+        closeWindow(winId);
+    };
+    win.querySelector('.win-btn-min').onclick = (e) => {
+        e.stopPropagation();
+        minimizeWindow(winId);
+    };
+    win.querySelector('.win-btn-max').onclick = (e) => {
+        e.stopPropagation();
+        toggleMaximizeWindow(winId);
+    };
+
+    const glass = win.querySelector('.window-glass');
+    if (glass) {
+        glass.onmousedown = (e) => {
+            e.stopPropagation();
+            bringToFront(win);
+        };
+    }
 
     setupWindowDrag(win);
     win.onmousedown = () => bringToFront(win);
@@ -458,10 +479,34 @@ function bringToFront(winEl) {
     const winId = winEl.id;
     activeInternalWinId = winId;
 
+    // Actualizar clases activas en todas las ventanas abiertas (manejo de glass overlay)
+    openWindows.forEach((wData) => {
+        if (wData.element) {
+            wData.element.classList.toggle('active-window', wData.element === winEl);
+        }
+    });
+
     document.querySelectorAll('.taskbar-item').forEach(item => {
         item.classList.toggle('active', item.dataset.winId === winId);
     });
     syncBrowserBounds();
+}
+
+function activateTopVisibleWindow() {
+    let topWin = null;
+    let maxZ = -1;
+    openWindows.forEach((wData) => {
+        if (wData.element && wData.element.style.display !== 'none') {
+            const z = parseInt(wData.element.style.zIndex, 10) || 0;
+            if (z > maxZ) {
+                maxZ = z;
+                topWin = wData.element;
+            }
+        }
+    });
+    if (topWin) {
+        bringToFront(topWin);
+    }
 }
 
 function closeWindow(winId) {
@@ -475,6 +520,7 @@ function closeWindow(winId) {
 
     if (activeInternalWinId === winId) {
         activeInternalWinId = null;
+        activateTopVisibleWindow();
     }
     updateExternalBrowserTaskbar(browserState);
     syncBrowserBounds();
@@ -484,12 +530,14 @@ function minimizeWindow(winId) {
     if (!openWindows.has(winId)) return;
     const winEl = openWindows.get(winId).element;
     winEl.style.display = 'none';
+    winEl.classList.remove('active-window');
 
     const taskItem = document.querySelector(`.taskbar-item[data-win-id="${winId}"]`);
     if (taskItem) taskItem.classList.remove('active');
 
     if (activeInternalWinId === winId) {
         activeInternalWinId = null;
+        activateTopVisibleWindow();
     }
     updateExternalBrowserTaskbar(browserState);
     syncBrowserBounds();
@@ -539,34 +587,98 @@ function addTaskbarItem(winId, meta) {
     container.appendChild(item);
 }
 
+// ==========================================
+// GESTOR CENTRALIZADO DE ARRASTRE Y SEGURIDAD
+// ==========================================
+let activeDragSession = null;
+
+function initGlobalDragManager() {
+    window.addEventListener('mousemove', (e) => {
+        if (!activeDragSession) return;
+        const dx = e.clientX - activeDragSession.startX;
+        const dy = e.clientY - activeDragSession.startY;
+
+        const maxX = Math.max(100, window.innerWidth - 60);
+        const maxY = Math.max(40, window.innerHeight - 80);
+        const newLeft = Math.min(maxX, Math.max(0, activeDragSession.initialX + dx));
+        const newTop = Math.min(maxY, Math.max(0, activeDragSession.initialY + dy));
+
+        activeDragSession.winEl.style.left = `${newLeft}px`;
+        activeDragSession.winEl.style.top = `${newTop}px`;
+    }, { passive: true });
+
+    const endDrag = () => {
+        if (!activeDragSession) return;
+        activeDragSession = null;
+        document.body.classList.remove('is-dragging-window');
+        document.body.style.cursor = 'default';
+    };
+
+    window.addEventListener('mouseup', endDrag);
+    window.addEventListener('blur', endDrag);
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) endDrag();
+    });
+
+    // Auto-recuperación de emergencia mediante tecla Escape
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            emergencyUnstick();
+        }
+    });
+
+    // Clic en la rejilla del escritorio descongela cualquier menú residual
+    const desktopGrid = document.querySelector('.desktop-icons-grid');
+    if (desktopGrid) {
+        desktopGrid.addEventListener('click', (e) => {
+            if (e.target === desktopGrid) {
+                emergencyUnstick();
+            }
+        });
+    }
+}
+
+function emergencyUnstick() {
+    if (activeDragSession) {
+        activeDragSession = null;
+    }
+    document.body.classList.remove('is-dragging-window');
+    document.body.style.cursor = 'default';
+
+    const startMenu = document.getElementById('start-menu');
+    if (startMenu && startMenu.classList.contains('show')) {
+        startMenu.classList.remove('show');
+    }
+
+    const audioPopup = document.getElementById('tray-audio-popup');
+    if (audioPopup && audioPopup.classList.contains('show')) {
+        audioPopup.classList.remove('show');
+    }
+
+    syncBrowserBounds();
+
+    if (window.labdeskAPI && window.labdeskAPI.system && window.labdeskAPI.system.emergencyUnstick) {
+        window.labdeskAPI.system.emergencyUnstick().catch(() => {});
+    }
+}
+
 function setupWindowDrag(winEl) {
     const header = winEl.querySelector('.window-header');
-    let isDragging = false;
-    let startX, startY, initialX, initialY;
+    if (!header) return;
 
     header.onmousedown = (e) => {
         if (e.target.closest('.window-controls')) return;
-        isDragging = true;
-        startX = e.clientX;
-        startY = e.clientY;
-        initialX = winEl.offsetLeft;
-        initialY = winEl.offsetTop;
+        bringToFront(winEl);
+        activeDragSession = {
+            winEl,
+            startX: e.clientX,
+            startY: e.clientY,
+            initialX: winEl.offsetLeft,
+            initialY: winEl.offsetTop
+        };
+        document.body.classList.add('is-dragging-window');
         document.body.style.cursor = 'move';
-    };
-
-    document.onmousemove = (e) => {
-        if (!isDragging) return;
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        winEl.style.left = `${Math.max(0, initialX + dx)}px`;
-        winEl.style.top = `${Math.max(0, initialY + dy)}px`;
-    };
-
-    document.onmouseup = () => {
-        if (isDragging) {
-            isDragging = false;
-            document.body.style.cursor = 'default';
-        }
+        e.preventDefault();
     };
 }
 

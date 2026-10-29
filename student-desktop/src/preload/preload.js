@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('labdeskAPI', {
         reboot: () => ipcRenderer.invoke('system:reboot'),
         setOverlayMode: (active, restoreExternalBrowser = false) =>
             ipcRenderer.invoke('system:setOverlayMode', { active, restoreExternalBrowser }),
+        emergencyUnstick: () => ipcRenderer.invoke('system:emergencyUnstick'),
         onAnnouncement: (callback) => ipcRenderer.on('show_announcement', (e, data) => callback(data))
     },
     browser: {

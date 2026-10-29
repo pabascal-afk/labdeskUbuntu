@@ -120,7 +120,7 @@ ipcMain.handle('system:setOverlayMode', (e, { active, restoreExternalBrowser }) 
         return;
     }
     if (active) {
-        mainWindow.setAlwaysOnTop(true, 'pop-up-menu');
+        mainWindow.setAlwaysOnTop(true);
         mainWindow.focus();
         mainWindow.moveTop();
     } else {
@@ -129,6 +129,16 @@ ipcMain.handle('system:setOverlayMode', (e, { active, restoreExternalBrowser }) 
             browser.focusExternalBrowser();
         }
     }
+});
+
+// Despegar / Recuperación de emergencia de puntero y capas
+ipcMain.handle('system:emergencyUnstick', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return false;
+    if (!browser.isKioskExam && !agent.isLocked) {
+        mainWindow.setAlwaysOnTop(false);
+    }
+    mainWindow.focus();
+    return true;
 });
 
 // Navegador Híbrido (Estándar + Visor Cautivo)
