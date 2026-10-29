@@ -534,6 +534,42 @@ echo "=========================================="`;
             content: `#!/bin/bash\nsystemctl --user restart labdesk 2>/dev/null || pkill -f electron || pkill -f labdesk\necho "Entorno de escritorio reiniciado."`
         },
         {
+            name: '💻 Abrir Consola / Terminal',
+            description: 'Abre una ventana de consola / terminal interactiva en el escritorio del cliente.',
+            icon: '💻',
+            content: `#!/bin/bash
+export DISPLAY="\${DISPLAY:-:0}"
+export XAUTHORITY="\${XAUTHORITY:-\$HOME/.Xauthority}"
+
+# 1. Detectar emulador de terminal gráfico instalado
+TERMINAL_BIN=""
+for t in x-terminal-emulator xterm lxterminal xfce4-terminal gnome-terminal konsole alacritty kitty; do
+    if command -v "$t" >/dev/null 2>&1; then
+        TERMINAL_BIN="$t"
+        break
+    fi
+done
+
+# 2. Si no hay terminal instalado, instalar xterm rápidamente
+if [ -z "$TERMINAL_BIN" ]; then
+    sudo -n apt-get update -qq 2>/dev/null || true
+    sudo -n apt-get install -y -qq xterm 2>/dev/null || true
+    TERMINAL_BIN="xterm"
+fi
+
+# 3. Lanzar terminal en la sesión del estudiante
+nohup "$TERMINAL_BIN" >/dev/null 2>&1 &
+
+# 4. Asegurar foco en el terminal
+sleep 0.6
+for WID in $(xdotool search --onlyvisible --class "$TERMINAL_BIN|xterm|terminal|x-terminal-emulator" 2>/dev/null); do
+    xdotool windowactivate "$WID" 2>/dev/null || true
+    xdotool windowraise "$WID" 2>/dev/null || true
+done
+
+echo "✅ Consola ($TERMINAL_BIN) abierta exitosamente en la pantalla del cliente."`
+        },
+        {
             name: '🌐 Test de Conectividad a Internet',
             description: 'Verifica ping al servidor y a servidores DNS externos.',
             icon: '🌐',
@@ -553,7 +589,7 @@ echo "=========================================="`;
                         if (!insErr) console.log(`✅ Default Linux script inserted: ${s.name}`);
                     }
                 );
-            } else if (cleanName.includes('Actualizar Software') || cleanName.includes('Audio USB') || cleanName.includes('Audífonos USB')) {
+            } else if (cleanName.includes('Actualizar Software') || cleanName.includes('Audio USB') || cleanName.includes('Audífonos USB') || cleanName.includes('Abrir Consola') || cleanName.includes('Terminal')) {
                 // Mantener los scripts esenciales al día
                 db.run(
                     `UPDATE scripts SET name = ?, description = ?, icon = ?, content = ? WHERE id = ?`,

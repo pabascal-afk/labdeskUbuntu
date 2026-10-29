@@ -86,12 +86,12 @@ class LinuxSystem {
 
     shutdown() {
         console.log('🛑 Apagando el sistema...');
-        exec('sudo /sbin/poweroff || sudo systemctl poweroff || systemctl poweroff');
+        exec('sudo -n /sbin/poweroff || sudo -n systemctl poweroff || systemctl poweroff || sudo poweroff || poweroff');
     }
 
     reboot() {
         console.log('🔄 Reiniciando el sistema...');
-        exec('sudo /sbin/reboot || sudo systemctl reboot || systemctl reboot');
+        exec('sudo -n /sbin/reboot || sudo -n systemctl reboot || systemctl reboot || sudo reboot || reboot');
     }
 
     runBashScript(scriptContent) {

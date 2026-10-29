@@ -276,6 +276,9 @@ function renderClients(clients) {
                 <button class="btn btn-sm btn-secondary" onclick="openSingleScriptPrompt('${client.id}')" title="Ejecutar script en este equipo">
                     📜 Script
                 </button>
+                <button class="btn btn-sm btn-secondary btn-card-reboot" onclick="rebootSingleClient('${client.id}', '${escapeHtml(client.name)}')" title="Reiniciar este equipo">
+                    🔄 Reiniciar
+                </button>
             </div>
         `;
 
@@ -608,6 +611,12 @@ async function renameClient(id, oldName) {
         body: JSON.stringify({ name: name.trim() })
     });
     fetchClients();
+}
+
+async function rebootSingleClient(id, name) {
+    if (!confirm(`¿Estás seguro de reiniciar el equipo "${name}"?`)) return;
+    await sendCommand(id, 'reboot');
+    showNotification(`🔄 Orden de reinicio enviada a ${name}`);
 }
 
 // ==========================================

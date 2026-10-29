@@ -514,9 +514,23 @@ body {
 
 .client-card-actions {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 0.4rem;
+    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+    gap: 0.35rem;
     padding: 0 0.9rem 0.75rem;
+}
+
+.client-card-actions .btn {
+    padding: 0.35rem 0.4rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+.btn-card-reboot:hover {
+    background: #dc2626 !important;
+    border-color: #ef4444 !important;
+    color: #ffffff !important;
 }
 
 /* MODALS */
