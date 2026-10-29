@@ -321,10 +321,14 @@ EOF
 openbox --reconfigure 2>/dev/null || true
 echo "✅ Margen de escritorio y foco de ventanas configurado."
 
-# 3. Políticas administradas de Chromium: permitir cookies de 3ros y popups (Google Login / OAuth)
+# 3. Políticas administradas de Chromium: Forzar Modo Invitado (Guest Mode), permitir cookies de 3ros y popups
 sudo -n mkdir -p /etc/chromium/policies/managed /etc/opt/chrome/policies/managed 2>/dev/null || true
 cat << 'POLOF' | sudo -n tee /etc/chromium/policies/managed/labdesk.json >/dev/null 2>&1 || true
 {
+  "BrowserGuestModeEnabled": true,
+  "BrowserGuestModeEnforced": true,
+  "BrowserSignin": 0,
+  "PasswordManagerEnabled": false,
   "BlockThirdPartyCookies": false,
   "DefaultCookiesSetting": 1,
   "DefaultPopupsSetting": 1,
@@ -338,7 +342,7 @@ cat << 'POLOF' | sudo -n tee /etc/chromium/policies/managed/labdesk.json >/dev/n
 }
 POLOF
 sudo -n cp -f /etc/chromium/policies/managed/labdesk.json /etc/opt/chrome/policies/managed/labdesk.json 2>/dev/null || true
-echo "✅ Políticas de Chromium (cookies de terceros y popups) aplicadas."
+echo "✅ Políticas de Chromium (Modo Invitado forzado, cookies y popups) aplicadas."
 
 # 3. Blindaje permanente de audio USB y dependencias en segundo plano
 (
@@ -570,6 +574,43 @@ done
 echo "✅ Consola ($TERMINAL_BIN) abierta exitosamente en la pantalla del cliente."`
         },
         {
+            name: '🛡️ Forzar Modo Invitado en Chromium (Guest Mode)',
+            description: 'Aplica políticas administradas para que Chromium siempre abra en Modo Invitado y borre los datos al cerrar.',
+            icon: '🛡️',
+            content: `#!/bin/bash
+echo "=========================================="
+echo "🛡️ Configurando Modo Invitado Permanente en Chromium"
+echo "=========================================="
+
+# 1. Instalar políticas administradas del sistema
+sudo -n mkdir -p /etc/chromium/policies/managed /etc/opt/chrome/policies/managed 2>/dev/null || true
+cat << 'POLOF' | sudo -n tee /etc/chromium/policies/managed/labdesk.json >/dev/null 2>&1 || true
+{
+  "BrowserGuestModeEnabled": true,
+  "BrowserGuestModeEnforced": true,
+  "BrowserSignin": 0,
+  "PasswordManagerEnabled": false,
+  "BlockThirdPartyCookies": false,
+  "DefaultCookiesSetting": 1,
+  "DefaultPopupsSetting": 1,
+  "ThirdPartyCookieDeprecation": 0,
+  "CookiesAllowedForUrls": [
+    "https://accounts.google.com",
+    "https://[*.]google.com",
+    "https://[*.]googleusercontent.com",
+    "https://[*.]gstatic.com"
+  ]
+}
+POLOF
+sudo -n cp -f /etc/chromium/policies/managed/labdesk.json /etc/opt/chrome/policies/managed/labdesk.json 2>/dev/null || true
+
+# 2. Limpiar perfiles antiguos residuales
+pkill -9 -f "chromium|chrome" 2>/dev/null || true
+rm -rf "$HOME/.config/labdesk/browser-profile" 2>/dev/null || true
+
+echo "✅ Modo Invitado forzado con éxito. Cada sesión será limpia y privada."`
+        },
+        {
             name: '🌐 Test de Conectividad a Internet',
             description: 'Verifica ping al servidor y a servidores DNS externos.',
             icon: '🌐',
@@ -589,7 +630,7 @@ echo "✅ Consola ($TERMINAL_BIN) abierta exitosamente en la pantalla del client
                         if (!insErr) console.log(`✅ Default Linux script inserted: ${s.name}`);
                     }
                 );
-            } else if (cleanName.includes('Actualizar Software') || cleanName.includes('Audio USB') || cleanName.includes('Audífonos USB') || cleanName.includes('Abrir Consola') || cleanName.includes('Terminal')) {
+            } else if (cleanName.includes('Actualizar Software') || cleanName.includes('Audio USB') || cleanName.includes('Audífonos USB') || cleanName.includes('Abrir Consola') || cleanName.includes('Terminal') || cleanName.includes('Invitado') || cleanName.includes('Guest')) {
                 // Mantener los scripts esenciales al día
                 db.run(
                     `UPDATE scripts SET name = ?, description = ?, icon = ?, content = ? WHERE id = ?`,

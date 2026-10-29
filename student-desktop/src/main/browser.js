@@ -65,6 +65,10 @@ class EducationalBrowser {
         if (process.platform !== 'linux') return;
         try {
             const policy = {
+                BrowserGuestModeEnabled: true,
+                BrowserGuestModeEnforced: true,
+                BrowserSignin: 0,
+                PasswordManagerEnabled: false,
                 BlockThirdPartyCookies: false,
                 DefaultCookiesSetting: 1,
                 DefaultPopupsSetting: 1,
@@ -285,6 +289,7 @@ class EducationalBrowser {
             this.prepareChromiumProfile();
             const args = [
                 `--user-data-dir=${this.profileDir}`,
+                '--guest',
                 '--start-maximized',
                 '--no-first-run',
                 '--no-default-browser-check',
@@ -306,6 +311,7 @@ class EducationalBrowser {
             fs.mkdirSync(this.profileDir, { recursive: true });
             const args = [
                 '--profile', this.profileDir,
+                '--private-window',
                 '-width', String(width),
                 '-height', String(usableHeight),
                 url

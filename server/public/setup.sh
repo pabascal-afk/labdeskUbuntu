@@ -76,10 +76,14 @@ cat <<EOF > "$STUDENT_HOME/.config/openbox/rc.xml"
 </openbox_config>
 EOF
 
-# Políticas de Chromium para habilitar cookies de 3ros y popups
+# Políticas de Chromium para forzar Modo Invitado (Guest Mode), habilitar cookies de 3ros y popups
 mkdir -p /etc/chromium/policies/managed /etc/opt/chrome/policies/managed 2>/dev/null || true
 cat <<EOF > /etc/chromium/policies/managed/labdesk.json
 {
+  "BrowserGuestModeEnabled": true,
+  "BrowserGuestModeEnforced": true,
+  "BrowserSignin": 0,
+  "PasswordManagerEnabled": false,
   "BlockThirdPartyCookies": false,
   "DefaultCookiesSetting": 1,
   "DefaultPopupsSetting": 1,
