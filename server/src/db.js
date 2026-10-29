@@ -290,24 +290,55 @@ else
     exit 1
 fi
 
-# 2. Configurar margen inferior de 48px en Openbox para la barra de tareas
+# 2. Configurar margen inferior de 48px en Openbox y blindar foco para popups/diálogos
 mkdir -p "$HOME/.config/openbox"
 RC_XML="$HOME/.config/openbox/rc.xml"
-if [ ! -f "$RC_XML" ]; then
 cat << 'EOF' > "$RC_XML"
 <?xml version="1.0" encoding="UTF-8"?>
 <openbox_config xmlns="http://openbox.org/3.4/rc">
+  <focus>
+    <focusNew>yes</focusNew>
+    <followMouse>no</followMouse>
+    <focusLast>yes</focusLast>
+    <underMouse>no</underMouse>
+  </focus>
   <margins>
     <top>0</top>
     <bottom>48</bottom>
     <left>0</left>
     <right>0</right>
   </margins>
+  <applications>
+    <application class="*Chromium*" type="dialog">
+      <focus>yes</focus>
+    </application>
+    <application class="*Google-chrome*" type="dialog">
+      <focus>yes</focus>
+    </application>
+  </applications>
 </openbox_config>
 EOF
-fi
 openbox --reconfigure 2>/dev/null || true
-echo "✅ Margen de escritorio configurado."
+echo "✅ Margen de escritorio y foco de ventanas configurado."
+
+# 3. Políticas administradas de Chromium: permitir cookies de 3ros y popups (Google Login / OAuth)
+sudo -n mkdir -p /etc/chromium/policies/managed /etc/opt/chrome/policies/managed 2>/dev/null || true
+cat << 'POLOF' | sudo -n tee /etc/chromium/policies/managed/labdesk.json >/dev/null 2>&1 || true
+{
+  "BlockThirdPartyCookies": false,
+  "DefaultCookiesSetting": 1,
+  "DefaultPopupsSetting": 1,
+  "ThirdPartyCookieDeprecation": 0,
+  "CookiesAllowedForUrls": [
+    "https://accounts.google.com",
+    "https://[*.]google.com",
+    "https://[*.]googleusercontent.com",
+    "https://[*.]gstatic.com"
+  ]
+}
+POLOF
+sudo -n cp -f /etc/chromium/policies/managed/labdesk.json /etc/opt/chrome/policies/managed/labdesk.json 2>/dev/null || true
+echo "✅ Políticas de Chromium (cookies de terceros y popups) aplicadas."
 
 # 3. Blindaje permanente de audio USB y dependencias en segundo plano
 (

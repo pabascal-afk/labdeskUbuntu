@@ -42,8 +42,11 @@ class EducationalBrowser {
             callback(false);
         });
 
-        // Configurar márgenes de 48px en Openbox para respetar siempre la barra de tareas de LabDesk
+        // Configurar márgenes de 48px en Openbox y blindar foco para popups
         this.ensureOpenboxMargins();
+
+        // Aplicar políticas del sistema para permitir cookies de 3ros y popups
+        this.ensureSystemBrowserPolicies();
     }
 
     getScreenDimensions() {
@@ -58,6 +61,33 @@ class EducationalBrowser {
         }
     }
 
+    ensureSystemBrowserPolicies() {
+        if (process.platform !== 'linux') return;
+        try {
+            const policy = {
+                BlockThirdPartyCookies: false,
+                DefaultCookiesSetting: 1,
+                DefaultPopupsSetting: 1,
+                ThirdPartyCookieDeprecation: 0,
+                CookiesAllowedForUrls: [
+                    "https://accounts.google.com",
+                    "https://[*.]google.com",
+                    "https://[*.]googleusercontent.com",
+                    "https://[*.]gstatic.com"
+                ]
+            };
+            const policyStr = JSON.stringify(policy);
+            const script = `
+                sudo -n mkdir -p /etc/chromium/policies/managed /etc/opt/chrome/policies/managed 2>/dev/null || true
+                echo '${policyStr.replace(/'/g, "'\\''")}' | sudo -n tee /etc/chromium/policies/managed/labdesk.json >/dev/null 2>&1 || true
+                sudo -n cp -f /etc/chromium/policies/managed/labdesk.json /etc/opt/chrome/policies/managed/labdesk.json 2>/dev/null || true
+            `;
+            exec(script, () => {});
+        } catch (e) {
+            console.error('Error aplicando políticas de Chromium:', e.message);
+        }
+    }
+
     ensureOpenboxMargins() {
         if (process.platform !== 'linux') return;
         try {
@@ -65,38 +95,73 @@ class EducationalBrowser {
             const rcPath = path.join(openboxDir, 'rc.xml');
             fs.mkdirSync(openboxDir, { recursive: true });
 
+            const defaultRc = `<?xml version="1.0" encoding="UTF-8"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <focus>
+    <focusNew>yes</focusNew>
+    <followMouse>no</followMouse>
+    <focusLast>yes</focusLast>
+    <underMouse>no</underMouse>
+  </focus>
+  <margins>
+    <top>0</top>
+    <bottom>${TASKBAR_HEIGHT}</bottom>
+    <left>0</left>
+    <right>0</right>
+  </margins>
+  <applications>
+    <application class="*Chromium*" type="dialog">
+      <focus>yes</focus>
+    </application>
+    <application class="*Google-chrome*" type="dialog">
+      <focus>yes</focus>
+    </application>
+  </applications>
+</openbox_config>`;
+
             if (fs.existsSync(rcPath)) {
                 let xml = fs.readFileSync(rcPath, 'utf8');
+                let modified = false;
+
+                // Asegurar margen inferior
                 if (xml.includes('<margins>')) {
                     xml = xml.replace(/<bottom>\s*\d+\s*<\/bottom>/g, `<bottom>${TASKBAR_HEIGHT}</bottom>`);
+                    modified = true;
                 } else if (xml.includes('</openbox_config>')) {
-                    const marginBlock = `
-  <margins>
-    <top>0</top>
-    <bottom>${TASKBAR_HEIGHT}</bottom>
-    <left>0</left>
-    <right>0</right>
-  </margins>
-</openbox_config>`;
-                    xml = xml.replace('</openbox_config>', marginBlock);
+                    xml = xml.replace('</openbox_config>', `  <margins>\n    <top>0</top>\n    <bottom>${TASKBAR_HEIGHT}</bottom>\n    <left>0</left>\n    <right>0</right>\n  </margins>\n</openbox_config>`);
+                    modified = true;
                 }
-                fs.writeFileSync(rcPath, xml, 'utf8');
+
+                // Evitar followMouse (evita robos de foco erráticos entre ventanas secundarias y principales)
+                if (xml.includes('<followMouse>')) {
+                    xml = xml.replace(/<followMouse>\s*yes\s*<\/followMouse>/gi, '<followMouse>no</followMouse>');
+                    modified = true;
+                } else if (xml.includes('<focus>')) {
+                    xml = xml.replace('<focus>', '<focus>\n    <followMouse>no</followMouse>\n    <focusNew>yes</focusNew>');
+                    modified = true;
+                } else if (xml.includes('</openbox_config>')) {
+                    xml = xml.replace('</openbox_config>', `  <focus>\n    <focusNew>yes</focusNew>\n    <followMouse>no</followMouse>\n    <focusLast>yes</focusLast>\n    <underMouse>no</underMouse>\n  </focus>\n</openbox_config>`);
+                    modified = true;
+                }
+
+                // Regla de popups/diálogos
+                if (!xml.includes('type="dialog"')) {
+                    if (xml.includes('</openbox_config>')) {
+                        xml = xml.replace('</openbox_config>', `  <applications>\n    <application class="*Chromium*" type="dialog">\n      <focus>yes</focus>\n    </application>\n    <application class="*Google-chrome*" type="dialog">\n      <focus>yes</focus>\n    </application>\n  </applications>\n</openbox_config>`);
+                        modified = true;
+                    }
+                }
+
+                if (modified) {
+                    fs.writeFileSync(rcPath, xml, 'utf8');
+                }
             } else {
-                const defaultRc = `<?xml version="1.0" encoding="UTF-8"?>
-<openbox_config xmlns="http://openbox.org/3.4/rc">
-  <margins>
-    <top>0</top>
-    <bottom>${TASKBAR_HEIGHT}</bottom>
-    <left>0</left>
-    <right>0</right>
-  </margins>
-</openbox_config>`;
                 fs.writeFileSync(rcPath, defaultRc, 'utf8');
             }
 
             exec('openbox --reconfigure', () => {});
         } catch (err) {
-            console.error('Error configurando márgenes de Openbox:', err.message);
+            console.error('Error configurando Openbox:', err.message);
         }
     }
 
@@ -159,7 +224,7 @@ class EducationalBrowser {
             prefs.browser.window_placement = {
                 bottom: usableHeight,
                 left: 0,
-                maximized: false,
+                maximized: true,
                 right: width,
                 top: 0,
                 work_area_bottom: usableHeight,
@@ -167,11 +232,32 @@ class EducationalBrowser {
                 work_area_right: width,
                 work_area_top: 0
             };
+
             prefs.profile = prefs.profile || {};
             prefs.profile.exit_type = 'Normal';
             prefs.profile.exited_cleanly = true;
 
-            fs.writeFileSync(prefsPath, JSON.stringify(prefs), 'utf8');
+            // 1. PERMITIR COOKIES DE TERCEROS (0 = Allow all third-party cookies)
+            // Resuelve de raíz el bucle infinito / flickering de pestañas en Google Login y OAuth
+            prefs.profile.cookie_controls_mode = 0;
+            prefs.profile.block_third_party_cookies = false;
+
+            // 2. PERMISOS DE CONTENIDO: Permitir cookies y popups de autenticación sin bloquear
+            prefs.profile.default_content_setting_values = prefs.profile.default_content_setting_values || {};
+            prefs.profile.default_content_setting_values.cookies = 1;
+            prefs.profile.default_content_setting_values.popups = 1;
+            prefs.profile.default_content_setting_values.federated_identity_api = 1;
+            prefs.profile.default_content_setting_values.automatic_downloads = 1;
+
+            // 3. PRIVACY SANDBOX Y SESIÓN
+            prefs.privacy_sandbox = prefs.privacy_sandbox || {};
+            prefs.privacy_sandbox.apis_enabled_v2 = true;
+
+            prefs.session = prefs.session || {};
+            prefs.session.restore_on_startup = 5;
+            prefs.session.startup_urls = [];
+
+            fs.writeFileSync(prefsPath, JSON.stringify(prefs, null, 2), 'utf8');
         } catch (e) {
             console.error('Error preparando perfil de Chromium:', e.message);
         }
@@ -199,13 +285,14 @@ class EducationalBrowser {
             this.prepareChromiumProfile();
             const args = [
                 `--user-data-dir=${this.profileDir}`,
-                `--window-position=0,0`,
-                `--window-size=${width},${usableHeight}`,
+                '--start-maximized',
                 '--no-first-run',
                 '--no-default-browser-check',
                 '--disable-infobars',
                 '--disable-session-crashed-bubble',
-                '--disable-features=Translate',
+                '--disable-features=Translate,BlockThirdPartyCookies,ThirdPartyStoragePartitioning',
+                '--test-third-party-cookie-phaseout=false',
+                '--disable-popup-blocking',
                 url
             ];
 
@@ -235,24 +322,25 @@ class EducationalBrowser {
         this.externalBrowserFocused = true;
         this.notifyStateChanged();
 
-        // Ajustar geometría y foco mediante xdotool / wmctrl tras abrir
+        // Ajustar geometría y foco respetando popups tras abrir
         setTimeout(() => this.enforceExternalBrowserBounds(), 600);
         setTimeout(() => this.enforceExternalBrowserBounds(), 1500);
     }
 
     enforceExternalBrowserBounds() {
         if (process.platform !== 'linux' || this.isKioskExam) return;
-        const { width, height } = this.getScreenDimensions();
-        const usableHeight = Math.max(400, height - TASKBAR_HEIGHT);
 
+        // Maximizamos solo la ventana principal del navegador para respetar el margen de 48px de Openbox.
+        // NUNCA redimensionamos diálogos ni popups secundarios para evitar luchas de foco y parpadeos.
         const cmd = `
             for WID in $(xdotool search --onlyvisible --class "chromium|chrome|firefox|Navigator" 2>/dev/null); do
-                wmctrl -i -r "$WID" -b remove,fullscreen,maximized_vert,maximized_horz 2>/dev/null || true
-                xdotool windowmove "$WID" 0 0 2>/dev/null || true
-                xdotool windowsize "$WID" ${width} ${usableHeight} 2>/dev/null || true
-                xdotool windowactivate "$WID" 2>/dev/null || true
-                xdotool windowraise "$WID" 2>/dev/null || true
+                IS_TRANSIENT=$(xprop -id "$WID" WM_TRANSIENT_FOR 2>/dev/null | grep -v 'not found' || true)
+                W_TYPE=$(xprop -id "$WID" _NET_WM_WINDOW_TYPE 2>/dev/null || true)
+                if [ -z "$IS_TRANSIENT" ] && ! echo "$W_TYPE" | grep -qi "DIALOG"; then
+                    wmctrl -i -r "$WID" -b add,maximized_vert,maximized_horz 2>/dev/null || true
+                fi
             done
+            wmctrl -x -a "chromium" 2>/dev/null || wmctrl -x -a "chrome" 2>/dev/null || wmctrl -x -a "firefox" 2>/dev/null || true
         `;
         exec(cmd, () => {});
     }

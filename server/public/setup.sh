@@ -49,6 +49,51 @@ table.insert(alsa_monitor.rules, {
 EOF
 cp /etc/wireplumber/main.lua.d/99-usb-priority.lua "$STUDENT_HOME/.config/wireplumber/main.lua.d/"
 
+# Configurar Openbox con margen inferior de 48px y regla para popups de Chromium
+cat <<EOF > "$STUDENT_HOME/.config/openbox/rc.xml"
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <focus>
+    <focusNew>yes</focusNew>
+    <followMouse>no</followMouse>
+    <focusLast>yes</focusLast>
+    <underMouse>no</underMouse>
+  </focus>
+  <margins>
+    <top>0</top>
+    <bottom>48</bottom>
+    <left>0</left>
+    <right>0</right>
+  </margins>
+  <applications>
+    <application class="*Chromium*" type="dialog">
+      <focus>yes</focus>
+    </application>
+    <application class="*Google-chrome*" type="dialog">
+      <focus>yes</focus>
+    </application>
+  </applications>
+</openbox_config>
+EOF
+
+# Políticas de Chromium para habilitar cookies de 3ros y popups
+mkdir -p /etc/chromium/policies/managed /etc/opt/chrome/policies/managed 2>/dev/null || true
+cat <<EOF > /etc/chromium/policies/managed/labdesk.json
+{
+  "BlockThirdPartyCookies": false,
+  "DefaultCookiesSetting": 1,
+  "DefaultPopupsSetting": 1,
+  "ThirdPartyCookieDeprecation": 0,
+  "CookiesAllowedForUrls": [
+    "https://accounts.google.com",
+    "https://[*.]google.com",
+    "https://[*.]googleusercontent.com",
+    "https://[*.]gstatic.com"
+  ]
+}
+EOF
+cp -f /etc/chromium/policies/managed/labdesk.json /etc/opt/chrome/policies/managed/labdesk.json 2>/dev/null || true
+
 cat <<EOF > "$STUDENT_HOME/.config/labdesk/config.json"
 {
   "serverUrl": "$SERVER_URL",
