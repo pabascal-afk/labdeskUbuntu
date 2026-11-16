@@ -306,6 +306,20 @@
                         <span><strong>Página Cautiva</strong> <small style="color:var(--text-dim);">(Modo Examen: fija la URL y bloquea la navegación)</small></span>
                     </label>
                 </div>
+
+                <!-- Selector de Estaciones Específicas en Botonera -->
+                <div class="field-group" style="margin-top:10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <label style="margin:0; font-size:11px;">Destinatarios: <span id="b-link-selected-count" style="color:var(--led-blue); font-weight:700;">0</span></label>
+                        <div style="display:flex; gap:4px;">
+                            <button type="button" class="btn-preset-toggle" style="padding:1px 6px; font-size:10px;" onclick="selectAllBotoneraLinkStations(true)">☑️ Todos</button>
+                            <button type="button" class="btn-preset-toggle" style="padding:1px 6px; font-size:10px;" onclick="selectAllBotoneraLinkStations(false)">◻️ Ninguno</button>
+                        </div>
+                    </div>
+                    <div id="b-link-stations-list" style="max-height:105px; overflow-y:auto; border:1px solid #27364d; border-radius:6px; padding:6px; background:#0b1120; display:grid; grid-template-columns:repeat(auto-fill, minmax(105px, 1fr)); gap:4px;">
+                        <!-- Generado dinámicamente -->
+                    </div>
+                </div>
             </div>
             <div class="modal-bottom" style="display:flex; justify-content:space-between; align-items:center;">
                 <button class="btn-cancel" onclick="closeModal('modal-link')">Cancelar</button>

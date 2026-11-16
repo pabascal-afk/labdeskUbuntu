@@ -662,6 +662,10 @@ body {
     display: flex;
     flex-direction: column;
 }
+.mosaic-card.captive-mode {
+    border-color: #f59e0b;
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.35);
+}
 .mosaic-thumb {
     height: 110px;
     background: black;

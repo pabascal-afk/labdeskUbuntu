@@ -184,6 +184,9 @@ class EducationalBrowser {
         if (this.mainWindow && !this.mainWindow.isDestroyed()) {
             this.mainWindow.webContents.send('browser_state_changed', this.getTabsState());
         }
+        if (typeof this.onKioskStateChanged === 'function') {
+            this.onKioskStateChanged(this.isKioskExam, this.captiveUrl);
+        }
     }
 
     notifyBlockedNavigation(blockedUrl) {

@@ -409,6 +409,26 @@ body {
     border-color: var(--accent-warning);
 }
 
+.client-card.captive-mode {
+    border-color: #f59e0b;
+    box-shadow: 0 0 14px rgba(245, 158, 11, 0.3);
+}
+
+.client-card.captive-mode .client-card-header {
+    background: rgba(245, 158, 11, 0.12);
+}
+
+.browser-station-item {
+    transition: background 0.15s, border-color 0.15s;
+    user-select: none;
+}
+.browser-station-item:hover {
+    background: #334155 !important;
+}
+.browser-station-item.offline {
+    opacity: 0.6;
+}
+
 .client-card-header {
     padding: 0.65rem 0.9rem;
     display: flex;

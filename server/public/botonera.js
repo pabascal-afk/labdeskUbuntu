@@ -319,8 +319,71 @@ async function saveCustomPresets() {
     }
 }
 
-function launchUrl(url, isKiosk = false) {
-    triggerAction('browser_open_url', { url, isKiosk });
+async function populateBotoneraLinkStations() {
+    const container = document.getElementById('b-link-stations-list');
+    if (!container) return;
+    try {
+        const res = await fetch('/api/clients');
+        const clients = await res.json();
+        let filtered = clients;
+        if (currentSectorId !== 'all') {
+            filtered = clients.filter(c => c.sector_id === Number(currentSectorId));
+        }
+        if (filtered.length === 0) {
+            container.innerHTML = '<p style="grid-column:1/-1; text-align:center; color:var(--text-dim); font-size:10px; margin:4px 0;">No hay estaciones</p>';
+            updateBotoneraLinkSelectedCount();
+            return;
+        }
+        container.innerHTML = filtered.map(c => {
+            const isOnline = c.status === 'online';
+            const isCaptive = c.is_captive === 1 || c.is_captive === true;
+            return `
+                <label style="display:flex; align-items:center; gap:4px; background:#1e293b; padding:4px 6px; border-radius:4px; cursor:pointer; font-size:11px; border:1px solid ${isCaptive ? '#f59e0b' : '#334155'};">
+                    <input type="checkbox" class="b-link-station-check" data-id="${c.id}" checked onchange="updateBotoneraLinkSelectedCount()">
+                    <span style="color:${isOnline ? '#10b981' : '#6b7280'}; font-size:9px;">●</span>
+                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</span>
+                    ${isCaptive ? '<span title="En Página Cautiva" style="font-size:9px;">🔒</span>' : ''}
+                </label>
+            `;
+        }).join('');
+        updateBotoneraLinkSelectedCount();
+    } catch(e) {}
+}
+
+function updateBotoneraLinkSelectedCount() {
+    const checks = document.querySelectorAll('.b-link-station-check');
+    const checked = Array.from(checks).filter(c => c.checked);
+    const countEl = document.getElementById('b-link-selected-count');
+    if (countEl) {
+        countEl.textContent = `${checked.length} de ${checks.length}`;
+    }
+}
+
+function selectAllBotoneraLinkStations(selectAll) {
+    document.querySelectorAll('.b-link-station-check').forEach(chk => {
+        chk.checked = selectAll;
+    });
+    updateBotoneraLinkSelectedCount();
+}
+
+async function launchUrl(url, isKiosk = false) {
+    const checks = Array.from(document.querySelectorAll('.b-link-station-check:checked'));
+    const totalChecks = document.querySelectorAll('.b-link-station-check');
+    if (checks.length === 0) {
+        alert('Debes seleccionar al menos una estación destinataria.');
+        return;
+    }
+    const payload = { url, isKiosk };
+    if (checks.length === totalChecks.length && currentSectorId === 'all') {
+        triggerAction('browser_open_url', payload);
+    } else {
+        const clientIds = checks.map(c => c.dataset.id);
+        await fetch('/api/clients/command/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ client_ids: clientIds, command: 'browser_open_url', payload })
+        });
+    }
 }
 
 function openLinkModal(isExam = false) {
@@ -339,13 +402,14 @@ function openLinkModal(isExam = false) {
 
     document.getElementById('custom-url-input').value = '';
     openModal('modal-link');
+    populateBotoneraLinkStations();
 }
 
 function pickPreset(url) {
     document.getElementById('custom-url-input').value = url;
 }
 
-function sendCustomUrl() {
+async function sendCustomUrl() {
     let url = document.getElementById('custom-url-input').value.trim();
     if (!url) return alert('Por favor ingresa o selecciona una URL.');
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
@@ -353,14 +417,30 @@ function sendCustomUrl() {
     }
 
     const isKiosk = document.getElementById('kiosk-mode-toggle').checked;
-    launchUrl(url, isKiosk);
+    await launchUrl(url, isKiosk);
     closeModal('modal-link');
     showToast(isKiosk ? `🔒 Examen fijado: ${url}` : `🚀 Enlace abierto: ${url}`);
 }
 
-function releaseKioskFromBotonera() {
+async function releaseKioskFromBotonera() {
     playHapticClick();
-    triggerAction('browser_kiosk_mode', { enabled: false });
+    const checks = Array.from(document.querySelectorAll('.b-link-station-check:checked'));
+    const totalChecks = document.querySelectorAll('.b-link-station-check');
+    const payload = { enabled: false };
+    if (checks.length === 0) {
+        alert('Selecciona las estaciones en las que deseas liberar la página cautiva.');
+        return;
+    }
+    if (checks.length === totalChecks.length && currentSectorId === 'all') {
+        triggerAction('browser_kiosk_mode', payload);
+    } else {
+        const clientIds = checks.map(c => c.dataset.id);
+        await fetch('/api/clients/command/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ client_ids: clientIds, command: 'browser_kiosk_mode', payload })
+        });
+    }
     closeModal('modal-link');
     showToast('🔓 Modo examen / Página Cautiva liberado');
 }
@@ -430,17 +510,25 @@ async function refreshMosaic() {
         }
 
         filtered.forEach(c => {
+            const isCaptive = c.is_captive === 1 || c.is_captive === true;
             const card = document.createElement('div');
-            card.className = 'mosaic-card';
+            card.className = `mosaic-card ${isCaptive ? 'captive-mode' : ''}`;
             card.innerHTML = `
-                <div class="mosaic-thumb">
+                <div class="mosaic-thumb" style="position:relative;">
                     <img id="mosaic-thumb-${c.id}" src="/api/clients/${c.id}/screenshot?t=${Date.now()}" onerror="this.src=''; this.alt='Sin Captura';">
+                    ${isCaptive ? `<div style="position:absolute; top:4px; right:4px; background:#f59e0b; color:#0f172a; font-size:10px; font-weight:800; padding:2px 6px; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,0.5);">🔒 Cautiva</div>` : ''}
                 </div>
-                <div class="mosaic-meta">
-                    <span>${escapeHtml(c.name)}</span>
-                    <span style="color:${c.status === 'online' ? '#10b981' : '#6b7280'}; font-size:10px;">
-                        ${c.status === 'online' ? (c.is_locked ? '🔒' : '🟢') : '⚫'}
-                    </span>
+                <div class="mosaic-meta" style="flex-direction:column; gap:4px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(c.name)}</span>
+                        <span style="color:${c.status === 'online' ? '#10b981' : '#6b7280'}; font-size:10px;">
+                            ${c.status === 'online' ? (c.is_locked ? '🔒' : '🟢') : '⚫'}
+                        </span>
+                    </div>
+                    ${isCaptive ? `
+                    <button class="btn-action" style="width:100%; margin-top:2px; padding:3px 6px; font-size:10px; font-weight:700; background:#b45309; color:#ffffff; border:none; border-radius:4px; cursor:pointer;" onclick="event.stopPropagation(); releaseSingleClientKioskFromBotonera('${c.id}', '${escapeHtml(c.name)}')">
+                        🔓 Salir Cautiva
+                    </button>` : ''}
                 </div>
             `;
             grid.appendChild(card);
@@ -448,6 +536,22 @@ async function refreshMosaic() {
 
         document.getElementById('mosaic-stats').textContent = `${filtered.length} pantallas supervisadas`;
     } catch(e) {}
+}
+
+async function releaseSingleClientKioskFromBotonera(clientId, clientName) {
+    playHapticClick();
+    if (!confirm(`¿Deseas desbloquear la navegación / salir del modo examen en ${clientName}?`)) return;
+    try {
+        await fetch(`/api/clients/${clientId}/command`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: 'browser_kiosk_mode', payload: { enabled: false } })
+        });
+        showToast(`🔓 Modo cautivo liberado en ${clientName}`);
+        setTimeout(refreshMosaic, 400);
+    } catch (e) {
+        alert('Error al liberar modo cautivo: ' + e.message);
+    }
 }
 
 // ==============================================================

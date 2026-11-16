@@ -39,6 +39,7 @@ function initSchema() {
             last_seen DATETIME,
             position INTEGER,
             is_locked INTEGER DEFAULT 0,
+            is_captive INTEGER DEFAULT 0,
             version TEXT DEFAULT '2.0',
             role TEXT DEFAULT 'student',
             assigned_sector_id INTEGER,
@@ -48,8 +49,11 @@ function initSchema() {
             active_tab TEXT,
             access_token TEXT
         )`, () => {
+            // Migración segura para bases de datos existentes
+            db.run("ALTER TABLE clients ADD COLUMN is_captive INTEGER DEFAULT 0", () => {});
+
             // Marcar todos los clientes offline al iniciar de forma segura
-            db.run("UPDATE clients SET status = 'offline'", (err) => {
+            db.run("UPDATE clients SET status = 'offline', is_captive = 0", (err) => {
                 if (!err) console.log('✅ Clientes inicializados en estado offline');
             });
         });

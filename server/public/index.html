@@ -148,10 +148,31 @@
 
                 <div class="form-group">
                     <label>Destino:</label>
-                    <select id="browser-target-select" class="select-box">
+                    <select id="browser-target-select" class="select-box" onchange="handleBrowserTargetChange(this.value)">
                         <option value="all">Toda la sala (Todos los equipos conectados)</option>
                         <option value="sector">Solo el aula activa</option>
+                        <option value="custom">Estaciones específicas / Personalizado</option>
                     </select>
+                </div>
+
+                <!-- Selector de Estaciones Específicas -->
+                <div id="browser-station-selection-area" style="margin-top: 10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <span style="font-size:0.85rem; font-weight:600; color:var(--text-secondary);">
+                            Estaciones destinatarias: <span id="browser-selected-count" style="color:#60a5fa; font-weight:700;">0</span> seleccionadas
+                        </span>
+                        <div style="display:flex; gap:6px;">
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="selectAllBrowserStations(true)" style="padding:2px 8px; font-size:0.75rem;">☑️ Todos</button>
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="selectAllBrowserStations(false)" style="padding:2px 8px; font-size:0.75rem;">◻️ Ninguno</button>
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="invertBrowserStations()" style="padding:2px 8px; font-size:0.75rem;">🔄 Invertir</button>
+                        </div>
+                    </div>
+                    <div id="browser-stations-list" class="browser-stations-grid" style="max-height:160px; overflow-y:auto; border:1px solid var(--border-color); border-radius:var(--radius-sm); padding:8px; background:#0b1120; display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:6px;">
+                        <!-- Checkboxes generados dinámicamente -->
+                    </div>
+                    <small style="color:var(--text-muted); display:block; margin-top:4px; font-size:0.75rem;">
+                        💡 <em>Tip: Desmarca cualquier estación que no deba recibir la página (ej: toda la sala menos un alumno).</em>
+                    </small>
                 </div>
             </div>
             <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">

@@ -63,8 +63,19 @@ class LabDeskAgent {
                 ip_address: system.getIpAddress(),
                 volume: audioState.volume,
                 is_muted: audioState.isMuted,
+                is_captive: browser.isKioskExam ? 1 : 0,
                 version: '2.0.0'
             });
+
+            // Sincronizar estado de navegación cautiva con el servidor
+            browser.onKioskStateChanged = (isKiosk, url) => {
+                if (this.socket && this.socket.connected) {
+                    this.socket.emit('client_state', { 
+                        is_captive: isKiosk ? 1 : 0, 
+                        active_tab: isKiosk ? (url || 'Examen') : '' 
+                    });
+                }
+            };
 
             this.sendToRenderer('server_connection_changed', { connected: true, serverUrl: this.serverUrl });
 
@@ -213,6 +224,7 @@ class LabDeskAgent {
         }
         if (this.socket && this.socket.connected) {
             this.socket.emit('local_unlock');
+            this.socket.emit('client_state', { is_captive: 0, active_tab: '' });
         }
     }
 

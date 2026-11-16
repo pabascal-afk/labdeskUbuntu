@@ -159,8 +159,8 @@ io.on('connection', (socket) => {
         }
 
         const proceedRegistration = () => {
-            db.run(`INSERT INTO clients (id, name, mac_address, status, ip_address, last_seen, version, volume, is_muted)
-                    VALUES (?, ?, ?, 'online', ?, datetime('now'), ?, ?, ?)
+            db.run(`INSERT INTO clients (id, name, mac_address, status, ip_address, last_seen, version, volume, is_muted, is_captive)
+                    VALUES (?, ?, ?, 'online', ?, datetime('now'), ?, ?, ?, COALESCE(?, 0))
                     ON CONFLICT(id) DO UPDATE SET
                     name = excluded.name,
                     mac_address = excluded.mac_address,
@@ -170,7 +170,7 @@ io.on('connection', (socket) => {
                     volume = excluded.volume,
                     is_muted = excluded.is_muted,
                     last_seen = datetime('now')`,
-                [id, name, mac_address, ip_address, version, volume, is_muted],
+                [id, name, mac_address, ip_address, version, volume, is_muted, data.is_captive !== undefined ? (data.is_captive ? 1 : 0) : null],
                 function(err) {
                     if (err) console.error('Error al registrar cliente:', err.message);
                     
@@ -200,20 +200,22 @@ io.on('connection', (socket) => {
         socket.on('disconnect', () => {
             clientSockets.delete(id);
             clientScreenshots.delete(id);
-            db.run(`UPDATE clients SET status = 'offline', last_seen = datetime('now') WHERE id = ?`, [id], () => {
+            db.run(`UPDATE clients SET status = 'offline', is_captive = 0, last_seen = datetime('now') WHERE id = ?`, [id], () => {
                 io.emit('clients_updated');
             });
         });
 
-        // Actualización de estado local (volumen, pestaña activa, silenciado)
+        // Actualización de estado local (volumen, pestaña activa, modo cautivo, silenciado)
         socket.on('client_state', (state) => {
             if (!state) return;
+            const captiveVal = state.is_captive !== undefined ? (state.is_captive ? 1 : 0) : null;
             db.run(`UPDATE clients SET 
                     volume = COALESCE(?, volume), 
                     is_muted = COALESCE(?, is_muted), 
-                    active_tab = COALESCE(?, active_tab) 
+                    active_tab = COALESCE(?, active_tab),
+                    is_captive = COALESCE(?, is_captive) 
                     WHERE id = ?`,
-                [state.volume, state.is_muted !== undefined ? (state.is_muted ? 1 : 0) : null, state.active_tab, id],
+                [state.volume, state.is_muted !== undefined ? (state.is_muted ? 1 : 0) : null, state.active_tab !== undefined ? state.active_tab : null, captiveVal, id],
                 () => io.emit('clients_updated')
             );
         });
@@ -318,7 +320,7 @@ app.get('/api/auth/me', (req, res) => {
 // Obtener lista de clientes
 app.get('/api/clients', (req, res) => {
     const query = `SELECT id, name, mac_address, status, ip_address, last_seen, 
-                          sector_id, position, is_locked, version, role, 
+                          sector_id, position, is_locked, is_captive, version, role, 
                           volume, is_muted, active_tab 
                    FROM clients 
                    ORDER BY COALESCE(position, 999999) ASC, name ASC`;
@@ -456,6 +458,22 @@ app.post('/api/clients/:id/command', (req, res) => {
 
     // Navegador / Pestañas
     if (['browser_open_url', 'browser_close_tab', 'browser_kiosk_mode'].includes(command)) {
+        if (command === 'browser_kiosk_mode') {
+            const isCaptiveVal = payload?.enabled ? 1 : 0;
+            db.run(`UPDATE clients SET is_captive = ? WHERE id = ?`, [isCaptiveVal, clientId], () => {
+                io.emit('clients_updated');
+            });
+        } else if (command === 'browser_open_url') {
+            if (payload?.isKiosk) {
+                db.run(`UPDATE clients SET is_captive = 1, active_tab = ? WHERE id = ?`, [payload.url || '', clientId], () => {
+                    io.emit('clients_updated');
+                });
+            } else {
+                db.run(`UPDATE clients SET active_tab = ? WHERE id = ?`, [payload?.url || '', clientId], () => {
+                    io.emit('clients_updated');
+                });
+            }
+        }
         socket.emit('browser_command', { command, payload });
         return res.json({ success: true });
     }
@@ -530,6 +548,22 @@ app.post('/api/clients/command/all', (req, res) => {
         }
 
         if (['browser_open_url', 'browser_close_tab', 'browser_kiosk_mode'].includes(command)) {
+            if (command === 'browser_kiosk_mode') {
+                const isCaptiveVal = payload?.enabled ? 1 : 0;
+                db.run(`UPDATE clients SET is_captive = ? ${filterClause}`, [isCaptiveVal, ...params], () => {
+                    io.emit('clients_updated');
+                });
+            } else if (command === 'browser_open_url') {
+                if (payload?.isKiosk) {
+                    db.run(`UPDATE clients SET is_captive = 1, active_tab = ? ${filterClause}`, [payload.url || '', ...params], () => {
+                        io.emit('clients_updated');
+                    });
+                } else {
+                    db.run(`UPDATE clients SET active_tab = ? ${filterClause}`, [payload?.url || '', ...params], () => {
+                        io.emit('clients_updated');
+                    });
+                }
+            }
             targets.forEach(t => t.socket.emit('browser_command', { command, payload }));
             return res.json({ success: true, count: targets.length });
         }
@@ -549,10 +583,104 @@ app.post('/api/clients/command/all', (req, res) => {
     });
 });
 
+// Comandos por lote a una lista específica de clientes (por ejemplo, toda la sala menos uno)
+app.post('/api/clients/command/batch', (req, res) => {
+    const { client_ids, command, payload } = req.body;
+    if (!Array.isArray(client_ids) || client_ids.length === 0) {
+        return res.status(400).json({ error: 'client_ids debe ser un arreglo no vacío' });
+    }
+
+    const placeholders = client_ids.map(() => '?').join(',');
+
+    if (command === 'lock') {
+        db.get(`SELECT value FROM settings WHERE key = 'unlock_pin'`, (err, pinRow) => {
+            const pin = pinRow ? pinRow.value : '2846';
+            db.run(`UPDATE clients SET is_locked = 1 WHERE id IN (${placeholders})`, client_ids, () => {
+                io.emit('clients_updated');
+            });
+            client_ids.forEach(cid => {
+                const s = clientSockets.get(cid);
+                if (s) s.emit('system_command', { command: 'lock', payload: { pin, message: payload?.message } });
+            });
+            res.json({ success: true, count: client_ids.length });
+        });
+        return;
+    }
+
+    if (command === 'unlock') {
+        db.run(`UPDATE clients SET is_locked = 0 WHERE id IN (${placeholders})`, client_ids, () => {
+            io.emit('clients_updated');
+        });
+        client_ids.forEach(cid => {
+            const s = clientSockets.get(cid);
+            if (s) s.emit('system_command', { command: 'unlock' });
+        });
+        return res.json({ success: true, count: client_ids.length });
+    }
+
+    if (['volume_set', 'volume_up', 'volume_down', 'volume_mute', 'volume_unmute'].includes(command)) {
+        if (command === 'volume_mute') db.run(`UPDATE clients SET is_muted = 1 WHERE id IN (${placeholders})`, client_ids);
+        if (command === 'volume_unmute') db.run(`UPDATE clients SET is_muted = 0 WHERE id IN (${placeholders})`, client_ids);
+        if (command === 'volume_set' && payload?.volume !== undefined) db.run(`UPDATE clients SET volume = ? WHERE id IN (${placeholders})`, [payload.volume, ...client_ids]);
+        io.emit('clients_updated');
+        client_ids.forEach(cid => {
+            const s = clientSockets.get(cid);
+            if (s) s.emit('audio_command', { command, payload });
+        });
+        return res.json({ success: true, count: client_ids.length });
+    }
+
+    if (['browser_open_url', 'browser_close_tab', 'browser_kiosk_mode'].includes(command)) {
+        if (command === 'browser_kiosk_mode') {
+            const isCaptiveVal = payload?.enabled ? 1 : 0;
+            db.run(`UPDATE clients SET is_captive = ? WHERE id IN (${placeholders})`, [isCaptiveVal, ...client_ids], () => {
+                io.emit('clients_updated');
+            });
+        } else if (command === 'browser_open_url') {
+            if (payload?.isKiosk) {
+                db.run(`UPDATE clients SET is_captive = 1, active_tab = ? WHERE id IN (${placeholders})`, [payload.url || '', ...client_ids], () => {
+                    io.emit('clients_updated');
+                });
+            } else {
+                db.run(`UPDATE clients SET active_tab = ? WHERE id IN (${placeholders})`, [payload?.url || '', ...client_ids], () => {
+                    io.emit('clients_updated');
+                });
+            }
+        }
+        client_ids.forEach(cid => {
+            const s = clientSockets.get(cid);
+            if (s) s.emit('browser_command', { command, payload });
+        });
+        return res.json({ success: true, count: client_ids.length });
+    }
+
+    if (command === 'announcement') {
+        client_ids.forEach(cid => {
+            const s = clientSockets.get(cid);
+            if (s) s.emit('system_command', { command: 'announcement', payload });
+        });
+        return res.json({ success: true, count: client_ids.length });
+    }
+
+    if (command === 'run_script') {
+        client_ids.forEach(cid => {
+            const s = clientSockets.get(cid);
+            if (s) s.emit('run_script', payload);
+        });
+        return res.json({ success: true, count: client_ids.length });
+    }
+
+    client_ids.forEach(cid => {
+        const s = clientSockets.get(cid);
+        if (s) s.emit('system_command', { command, payload });
+    });
+    res.json({ success: true, count: client_ids.length });
+});
+
 // Resumen del aula para la Botonera del Profesor
 app.get('/api/teacher/summary', (req, res) => {
     const sector_id = req.query.sector_id;
-    let clientQuery = 'SELECT COUNT(*) as total, SUM(CASE WHEN status="online" THEN 1 ELSE 0 END) as online, SUM(CASE WHEN is_locked=1 THEN 1 ELSE 0 END) as locked, SUM(CASE WHEN is_muted=1 THEN 1 ELSE 0 END) as muted FROM clients';
+    let clientQuery = 'SELECT COUNT(*) as total, SUM(CASE WHEN status="online" THEN 1 ELSE 0 END) as online, SUM(CASE WHEN is_locked=1 THEN 1 ELSE 0 END) as locked, SUM(CASE WHEN is_muted=1 THEN 1 ELSE 0 END) as muted, SUM(CASE WHEN is_captive=1 THEN 1 ELSE 0 END) as captive FROM clients';
     const params = [];
     if (sector_id && sector_id !== 'all') {
         clientQuery += ' WHERE sector_id = ?';
@@ -565,6 +693,10 @@ app.get('/api/teacher/summary', (req, res) => {
         db.get('SELECT ((SELECT COUNT(*) FROM turn_ins) + (SELECT COUNT(*) FROM submissions)) as turn_in_count', [], (err2, turnIns) => {
             res.json({
                 total: stats ? (stats.total || 0) : 0,
+                online: stats ? (stats.online || 0) : 0,
+                locked: stats ? (stats.locked || 0) : 0,
+                muted: stats ? (stats.muted || 0) : 0,
+                captive: stats ? (stats.captive || 0) : 0,
                 online: stats ? (stats.online || 0) : 0,
                 locked: stats ? (stats.locked || 0) : 0,
                 muted: stats ? (stats.muted || 0) : 0,

@@ -121,7 +121,13 @@ function setupEventListeners() {
     document.getElementById('btn-unmute-all').onclick = () => sendGlobalCommand('volume_unmute');
 
     // Modales
-    document.getElementById('btn-open-tabs-modal').onclick = () => { openModal('modal-browser'); loadAdminPresets(); };
+    document.getElementById('btn-open-tabs-modal').onclick = () => { 
+        openModal('modal-browser'); 
+        loadAdminPresets(); 
+        const targetSelect = document.getElementById('browser-target-select');
+        if (targetSelect) targetSelect.value = activeSectorId === 'all' ? 'all' : 'sector';
+        populateBrowserStations();
+    };
     document.getElementById('btn-turn-ins-modal').onclick = () => { openModal('modal-turn-ins'); fetchTurnIns(); };
     document.getElementById('btn-scripts-modal').onclick = () => { openModal('modal-scripts'); fetchScripts(); };
     document.getElementById('btn-power-modal').onclick = () => openModal('modal-power');
@@ -207,9 +213,10 @@ function renderClients(clients) {
         const isOnline = client.status === 'online';
         const isLocked = client.is_locked === 1;
         const isMuted = client.is_muted === 1;
+        const isCaptive = client.is_captive === 1 || client.is_captive === true;
 
         const card = document.createElement('div');
-        card.className = `client-card ${isLocked ? 'locked' : ''}`;
+        card.className = `client-card ${isLocked ? 'locked' : ''} ${isCaptive ? 'captive-mode' : ''}`;
         card.id = `card-${client.id}`;
 
         // Opciones del selector de aula para este cliente
@@ -230,6 +237,11 @@ function renderClients(clients) {
                 </div>
                 <div style="display:flex; align-items:center; gap:6px;">
                     <span class="client-status-badge">${isOnline ? (isLocked ? '🔒 Bloqueado' : 'Activo') : 'Desconectado'}</span>
+                    ${isCaptive ? `
+                        <span class="client-status-badge" style="background:#f59e0b; color:#0f172a; font-weight:700;" title="Página Cautiva Activa (Modo Examen)">
+                            🔒 Cautiva
+                        </span>
+                    ` : ''}
                     <button class="btn-card-delete" title="Eliminar este equipo de la lista" onclick="deleteClientPrompt('${client.id}', '${escapeHtml(client.name)}')">✕</button>
                 </div>
             </div>
@@ -245,7 +257,7 @@ function renderClients(clients) {
             <div class="client-card-body">
                 <div class="client-info-row">
                     <span>IP: ${client.ip_address || '127.0.0.1'}</span>
-                    <span>${client.active_tab ? '🌐 ' + escapeHtml(client.active_tab.substring(0, 16)) : 'Escritorio'}</span>
+                    <span title="${escapeHtml(client.active_tab || '')}">${isCaptive ? '🔒 Cautiva: ' + escapeHtml((client.active_tab || 'Examen').substring(0, 16)) : (client.active_tab ? '🌐 ' + escapeHtml(client.active_tab.substring(0, 16)) : 'Escritorio')}</span>
                 </div>
 
                 <!-- Selector de Aula / Sector -->
@@ -267,10 +279,15 @@ function renderClients(clients) {
                 <button class="btn btn-sm ${isLocked ? 'btn-success' : 'btn-warning'}" onclick="toggleLockClient('${client.id}', ${isLocked})">
                     ${isLocked ? '🔓 Abrir' : '🔒 Trabar'}
                 </button>
+                ${isCaptive ? `
+                    <button class="btn btn-sm btn-warning" onclick="releaseSingleClientKiosk('${client.id}', '${escapeHtml(client.name)}')" title="Quitar la página cautiva y desbloquear navegación en este equipo" style="background:#f59e0b; color:#0f172a; font-weight:700; border:1px solid #d97706;">
+                        🔓 Salir Cautiva
+                    </button>
+                ` : ''}
                 <button class="btn btn-sm btn-secondary" onclick="openRdp('${client.id}', '${escapeHtml(client.name)}')">
                     🖥️ Control
                 </button>
-                <button class="btn btn-sm btn-secondary" onclick="openSingleTabPrompt('${client.id}')">
+                <button class="btn btn-sm btn-secondary" onclick="openSingleTabPrompt('${client.id}')" title="Enviar enlace o página cautiva a este equipo">
                     🌐 Pestaña
                 </button>
                 <button class="btn btn-sm btn-secondary" onclick="openSingleScriptPrompt('${client.id}')" title="Ejecutar script en este equipo">
@@ -728,6 +745,91 @@ function setQuickUrl(url) {
     document.getElementById('browser-url-input').value = url;
 }
 
+function populateBrowserStations(preselectedIds = null) {
+    const container = document.getElementById('browser-stations-list');
+    if (!container) return;
+
+    const targetMode = document.getElementById('browser-target-select').value;
+    let relevantClients = currentClients;
+    if (targetMode === 'sector' && activeSectorId !== 'all') {
+        relevantClients = currentClients.filter(c => c.sector_id == activeSectorId);
+    }
+
+    if (relevantClients.length === 0) {
+        container.innerHTML = '<p style="grid-column:1/-1; text-align:center; color:var(--text-muted); font-size:0.8rem; margin:8px 0;">No hay estaciones disponibles</p>';
+        updateBrowserSelectedCount();
+        return;
+    }
+
+    container.innerHTML = relevantClients.map(c => {
+        const isOnline = c.status === 'online';
+        const isCaptive = c.is_captive === 1 || c.is_captive === true;
+        let checked = true;
+        if (preselectedIds !== null) {
+            checked = preselectedIds.includes(String(c.id));
+        } else if (targetMode === 'sector' && activeSectorId !== 'all') {
+            checked = c.sector_id == activeSectorId;
+        }
+
+        return `
+            <label class="browser-station-item ${!isOnline ? 'offline' : ''}" style="display:flex; align-items:center; gap:6px; background:#1e293b; padding:5px 8px; border-radius:4px; cursor:pointer; font-size:0.8rem; border:1px solid ${isCaptive ? '#f59e0b' : '#334155'};">
+                <input type="checkbox" class="browser-station-check" data-id="${c.id}" ${checked ? 'checked' : ''} onchange="onBrowserStationCheckChange()">
+                <span class="status-dot ${isOnline ? 'online' : 'offline'}" style="width:7px; height:7px;"></span>
+                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;" title="${escapeHtml(c.name)} (${c.ip_address || '127.0.0.1'})">
+                    ${escapeHtml(c.name)}
+                </span>
+                ${isCaptive ? '<span title="Página Cautiva Activa" style="font-size:10px;">🔒</span>' : ''}
+            </label>
+        `;
+    }).join('');
+
+    updateBrowserSelectedCount();
+}
+
+function updateBrowserSelectedCount() {
+    const checks = document.querySelectorAll('.browser-station-check');
+    const checked = Array.from(checks).filter(c => c.checked);
+    const countEl = document.getElementById('browser-selected-count');
+    if (countEl) {
+        countEl.textContent = `${checked.length} de ${checks.length}`;
+    }
+}
+
+function onBrowserStationCheckChange() {
+    updateBrowserSelectedCount();
+    const select = document.getElementById('browser-target-select');
+    if (select) {
+        select.value = 'custom';
+    }
+}
+
+function handleBrowserTargetChange(val) {
+    if (val === 'all') {
+        selectAllBrowserStations(true);
+    } else if (val === 'sector') {
+        const checks = document.querySelectorAll('.browser-station-check');
+        checks.forEach(chk => {
+            const client = currentClients.find(c => String(c.id) === String(chk.dataset.id));
+            chk.checked = client && (activeSectorId === 'all' || client.sector_id == activeSectorId);
+        });
+        updateBrowserSelectedCount();
+    }
+}
+
+function selectAllBrowserStations(selectAll) {
+    document.querySelectorAll('.browser-station-check').forEach(chk => {
+        chk.checked = selectAll;
+    });
+    updateBrowserSelectedCount();
+}
+
+function invertBrowserStations() {
+    document.querySelectorAll('.browser-station-check').forEach(chk => {
+        chk.checked = !chk.checked;
+    });
+    updateBrowserSelectedCount();
+}
+
 async function sendBrowserUrl() {
     let url = document.getElementById('browser-url-input').value.trim();
     if (!url) return alert('Por favor ingresa o selecciona una URL.');
@@ -737,44 +839,75 @@ async function sendBrowserUrl() {
 
     const isKiosk = document.getElementById('kiosk-exam-mode').checked;
     const target = document.getElementById('browser-target-select').value;
-
     const payload = { url, isKiosk };
 
-    if (target === 'all') {
+    const selectedChecks = Array.from(document.querySelectorAll('.browser-station-check:checked'));
+    if (selectedChecks.length === 0) {
+        return alert('Debes seleccionar al menos una estación destinataria en la lista.');
+    }
+
+    const totalChecks = document.querySelectorAll('.browser-station-check');
+    const clientIds = selectedChecks.map(c => c.dataset.id);
+
+    // Si todas están marcadas y el target es 'all', enviar global
+    if (target === 'all' && selectedChecks.length === totalChecks.length) {
         await sendGlobalCommand('browser_open_url', payload);
     } else {
-        const clientsToTarget = activeSectorId === 'all' ? currentClients : currentClients.filter(c => c.sector_id == activeSectorId);
-        for (const c of clientsToTarget) {
-            await sendCommand(c.id, 'browser_open_url', payload);
-        }
+        await fetch('/api/clients/command/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ client_ids: clientIds, command: 'browser_open_url', payload })
+        });
     }
 
     closeModal('modal-browser');
-    showNotification(isKiosk ? `🔒 Página Cautiva (Modo Examen) enviada: ${url}` : `🚀 Enlace abierto en estaciones: ${url}`);
+    showNotification(isKiosk 
+        ? `🔒 Página Cautiva (Modo Examen) enviada a ${selectedChecks.length} estación(es): ${url}` 
+        : `🚀 Enlace abierto en ${selectedChecks.length} estación(es): ${url}`);
 }
 
 async function releaseKioskMode() {
+    const selectedChecks = Array.from(document.querySelectorAll('.browser-station-check:checked'));
+    const totalChecks = document.querySelectorAll('.browser-station-check');
     const target = document.getElementById('browser-target-select').value;
     const payload = { enabled: false };
 
-    if (target === 'all') {
+    if (selectedChecks.length === 0) {
+        return alert('Selecciona al menos una estación en la lista para liberar la página cautiva.');
+    }
+
+    const clientIds = selectedChecks.map(c => c.dataset.id);
+
+    if (target === 'all' && selectedChecks.length === totalChecks.length) {
         await sendGlobalCommand('browser_kiosk_mode', payload);
     } else {
-        const clientsToTarget = activeSectorId === 'all' ? currentClients : currentClients.filter(c => c.sector_id == activeSectorId);
-        for (const c of clientsToTarget) {
-            await sendCommand(c.id, 'browser_kiosk_mode', payload);
-        }
+        await fetch('/api/clients/command/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ client_ids: clientIds, command: 'browser_kiosk_mode', payload })
+        });
     }
 
     closeModal('modal-browser');
-    showNotification('🔓 Modo examen / Página Cautiva liberado en las estaciones.');
+    showNotification(`🔓 Página Cautiva liberada en ${selectedChecks.length} estación(es).`);
+}
+
+async function releaseSingleClientKiosk(clientId, clientName) {
+    await sendCommand(clientId, 'browser_kiosk_mode', { enabled: false });
+    showNotification(`🔓 Navegación cautiva liberada en ${clientName || 'la estación'}`);
 }
 
 function openSingleTabPrompt(clientId) {
-    const url = prompt('Ingresa la URL a abrir en este equipo:');
-    if (!url || !url.trim()) return;
-    const fullUrl = url.startsWith('http') ? url.trim() : 'https://' + url.trim();
-    sendCommand(clientId, 'browser_open_url', { url: fullUrl });
+    openModal('modal-browser');
+    loadAdminPresets();
+    const targetSelect = document.getElementById('browser-target-select');
+    if (targetSelect) targetSelect.value = 'custom';
+    populateBrowserStations([String(clientId)]);
+    const input = document.getElementById('browser-url-input');
+    if (input) {
+        input.value = '';
+        input.focus();
+    }
 }
 
 // ==========================================
