@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const xlsx = require('xlsx');
 const AdmZip = require('adm-zip');
 const db = require('./db');
+const powerScheduler = require('./powerScheduler');
 
 const PORT = process.env.PORT || 3000;
 const LATEST_AGENT_VERSION = '2.0.0';
@@ -1863,7 +1864,50 @@ app.get('/api/branding/status', (req, res) => {
     res.json({ exists, url: exists ? '/uploads/branding/wallpaper.jpg' : null });
 });
 
+// ==========================================
+// HORARIO AUTOMÁTICO DE ENERGÍA (WoL / RTC / SUSPENSIÓN)
+// ==========================================
+app.get('/api/power/schedule', async (req, res) => {
+    try {
+        await powerScheduler.reloadConfig();
+        res.json(powerScheduler.getStatus());
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/power/schedule', (req, res) => {
+    const body = req.body || {};
+    const updates = {
+        power_schedule_enabled: body.enabled ? '1' : '0',
+        power_schedule_action: body.action === 'shutdown' ? 'shutdown' : 'suspend',
+        power_schedule_off_time: String(body.offTime || '18:30').trim(),
+        power_schedule_on_time: String(body.onTime || '07:30').trim(),
+        power_schedule_days: Array.isArray(body.days) ? body.days.map(Number).filter(n => Number.isInteger(n) && n >= 0 && n <= 6).join(',') : String(body.days !== undefined ? body.days : '1,2,3,4,5'),
+        power_schedule_use_rtc: body.useRtc !== false ? '1' : '0',
+        power_schedule_warn_minutes: String(Math.max(0, Math.min(30, Number(body.warnMinutes ?? 2) || 0))),
+        power_schedule_enforce_weekend: body.enforceWeekend ? '1' : '0'
+    };
+
+    db.serialize(() => {
+        db.run('BEGIN TRANSACTION');
+        const stmt = db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`);
+        for (const [k, v] of Object.entries(updates)) {
+            stmt.run(k, v);
+        }
+        stmt.finalize();
+        db.run('COMMIT', async (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            await powerScheduler.reloadConfig();
+            const status = powerScheduler.getStatus();
+            io.emit('power_schedule_updated', status);
+            res.json({ success: true, status });
+        });
+    });
+});
+
 // Arrancar servidor
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 LabDesk Server escuchando en http://0.0.0.0:${PORT}`);
+    powerScheduler.start(db, io, wol, clientSockets);
 });

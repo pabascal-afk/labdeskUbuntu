@@ -1,4 +1,5 @@
 // LabDesk Student Agent - Socket.IO Client
+const { app } = require('electron');
 const { io } = require('socket.io-client');
 const fs = require('fs');
 const path = require('path');
@@ -119,7 +120,11 @@ class LabDeskAgent {
                 this.setLocked(false);
                 browser.setKioskExam(false);
             } else if (command === 'shutdown') {
-                system.shutdown();
+                if (app && app.releasePowerSaveBlocker) app.releasePowerSaveBlocker();
+                system.shutdown(payload || {});
+            } else if (command === 'suspend') {
+                if (app && app.releasePowerSaveBlocker) app.releasePowerSaveBlocker();
+                system.suspend(payload || {});
             } else if (command === 'reboot') {
                 system.reboot();
             } else if (command === 'start_live_stream') {

@@ -1,5 +1,5 @@
 // LabDesk Student Desktop Shell - Main Process
-const { app, BrowserWindow, screen, ipcMain, globalShortcut } = require('electron');
+const { app, BrowserWindow, screen, ipcMain, globalShortcut, powerSaveBlocker, powerMonitor } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -10,6 +10,26 @@ const browser = require('./browser');
 const agent = require('./agent');
 
 let mainWindow = null;
+let displaySleepBlockerId = null;
+
+app.ensurePowerSaveBlocker = function() {
+    try {
+        if (displaySleepBlockerId === null || !powerSaveBlocker.isStarted(displaySleepBlockerId)) {
+            displaySleepBlockerId = powerSaveBlocker.start('prevent-display-sleep');
+            console.log('☀️ Bloqueo de suspensión de pantalla activo (ID:', displaySleepBlockerId, ')');
+        }
+    } catch (e) {}
+};
+
+app.releasePowerSaveBlocker = function() {
+    try {
+        if (displaySleepBlockerId !== null && powerSaveBlocker.isStarted(displaySleepBlockerId)) {
+            powerSaveBlocker.stop(displaySleepBlockerId);
+            console.log('🌙 Bloqueo de suspensión de pantalla liberado temporalmente');
+        }
+        displaySleepBlockerId = null;
+    } catch (e) {}
+};
 
 // Bloquear múltiples instancias
 const gotTheLock = app.requestSingleInstanceLock();
@@ -71,6 +91,12 @@ function createWindow() {
     // Inicializar módulos
     browser.init(mainWindow);
     agent.init(mainWindow);
+    app.ensurePowerSaveBlocker();
+
+    powerMonitor.on('resume', () => {
+        console.log('☀️ Sistema reanudado desde suspensión. Reactivando bloqueo de pantalla...');
+        app.ensurePowerSaveBlocker();
+    });
 
     mainWindow.on('closed', () => {
         mainWindow = null;
@@ -78,6 +104,7 @@ function createWindow() {
 }
 
 app.on('will-quit', () => {
+    app.releasePowerSaveBlocker();
     globalShortcut.unregisterAll();
 });
 
@@ -104,6 +131,7 @@ ipcMain.handle('system:info', () => ({
 
 ipcMain.handle('system:shutdown', () => {
     app.isQuitting = true;
+    app.releasePowerSaveBlocker();
     return system.shutdown();
 });
 ipcMain.handle('system:reboot', () => {

@@ -84,9 +84,39 @@ class LinuxSystem {
         return docsPath;
     }
 
-    shutdown() {
+    scheduleRtcWake(wakeAtEpoch) {
+        return new Promise((resolve) => {
+            const epoch = Number(wakeAtEpoch);
+            if (!Number.isFinite(epoch) || epoch <= Math.floor(Date.now() / 1000) + 30) {
+                return resolve(false);
+            }
+            console.log(`⏰ Programando despertar RTC para epoch ${epoch} (${new Date(epoch * 1000).toLocaleString()})`);
+            const cmd = `sudo -n /usr/sbin/rtcwake -m no -t ${epoch} 2>/dev/null || sudo -n /sbin/rtcwake -m no -t ${epoch} 2>/dev/null || sudo -n rtcwake -m no -t ${epoch} 2>/dev/null || (echo 0 | sudo -n tee /sys/class/rtc/rtc0/wakealarm >/dev/null 2>&1 && echo ${epoch} | sudo -n tee /sys/class/rtc/rtc0/wakealarm >/dev/null 2>&1)`;
+            exec(cmd, (err) => {
+                if (err) {
+                    console.warn('⚠️ No se pudo programar alarma RTC local (se usará Wake-on-LAN desde el servidor):', err.message);
+                } else {
+                    console.log('✅ Alarma RTC configurada correctamente.');
+                }
+                resolve(!err);
+            });
+        });
+    }
+
+    async shutdown(options = {}) {
+        if (options && options.wakeAtEpoch) {
+            await this.scheduleRtcWake(options.wakeAtEpoch);
+        }
         console.log('🛑 Apagando el sistema...');
         exec('sudo -n /sbin/poweroff || sudo -n systemctl poweroff || systemctl poweroff || sudo poweroff || poweroff');
+    }
+
+    async suspend(options = {}) {
+        if (options && options.wakeAtEpoch) {
+            await this.scheduleRtcWake(options.wakeAtEpoch);
+        }
+        console.log('🌙 Suspendiendo el sistema (modo dormir)...');
+        exec('sudo -n systemctl suspend || systemctl suspend || sudo -n /usr/sbin/pm-suspend');
     }
 
     reboot() {

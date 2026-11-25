@@ -130,7 +130,10 @@ function setupEventListeners() {
     };
     document.getElementById('btn-turn-ins-modal').onclick = () => { openModal('modal-turn-ins'); fetchTurnIns(); };
     document.getElementById('btn-scripts-modal').onclick = () => { openModal('modal-scripts'); fetchScripts(); };
-    document.getElementById('btn-power-modal').onclick = () => openModal('modal-power');
+    document.getElementById('btn-power-modal').onclick = () => {
+        openModal('modal-power');
+        loadPowerSchedule();
+    };
     document.getElementById('btn-settings-modal').onclick = () => { openModal('modal-settings'); fetchSettings(); };
     
     // Tareas y Roster Escolar
@@ -1163,14 +1166,86 @@ async function runScriptNow(content, scriptName) {
 }
 
 // ==========================================
-// ENERGÍA
+// ENERGÍA Y HORARIO AUTOMÁTICO
 // ==========================================
 async function sendPowerAction(action) {
     if (action === 'shutdown' && !confirm('¿Estás seguro de apagar todos los equipos de este sector?')) return;
+    if (action === 'suspend' && !confirm('¿Estás seguro de suspender (dormir) todos los equipos de este sector?')) return;
     if (action === 'reboot' && !confirm('¿Estás seguro de reiniciar todos los equipos de este sector?')) return;
     await sendGlobalCommand(action);
     closeModal('modal-power');
     showNotification(`Comando ${action} enviado.`);
+}
+
+function renderPowerScheduleStatus(status) {
+    const summaryEl = document.getElementById('ps-status-summary');
+    if (!summaryEl || !status) return;
+    const cfg = status.config || {};
+    if (!cfg.enabled) {
+        summaryEl.innerHTML = '⏸️ Programador desactivado. Las estaciones solo se controlarán manualmente.';
+        return;
+    }
+    const actionLabel = cfg.action === 'shutdown' ? '🛑 Apagar' : '🌙 Suspender';
+    const nextOffText = status.nextOffLocal || 'Sin programar';
+    const nextWakeText = status.nextWakeLocal || 'Sin programar';
+    summaryEl.innerHTML = `
+        <div><strong>Estado:</strong> ✅ Activo (${actionLabel}) &nbsp;|&nbsp; <strong>Hora del servidor:</strong> ${status.serverLocalTime || '-'}</div>
+        <div style="margin-top:4px;"><strong>Próximo cierre:</strong> ${nextOffText} &nbsp;|&nbsp; <strong>Próximo despertar:</strong> ${nextWakeText}</div>
+    `;
+}
+
+async function loadPowerSchedule() {
+    try {
+        const res = await fetch('/api/power/schedule');
+        const status = await res.json();
+        const cfg = status.config || {};
+
+        document.getElementById('ps-enabled').checked = !!cfg.enabled;
+        document.getElementById('ps-action').value = cfg.action === 'shutdown' ? 'shutdown' : 'suspend';
+        document.getElementById('ps-off-time').value = cfg.offTime || '18:30';
+        document.getElementById('ps-on-time').value = cfg.onTime || '07:30';
+        document.getElementById('ps-warn-minutes').value = cfg.warnMinutes !== undefined ? cfg.warnMinutes : 2;
+        document.getElementById('ps-use-rtc').checked = cfg.useRtc !== false;
+        document.getElementById('ps-enforce-weekend').checked = !!cfg.enforceWeekend;
+
+        const daysSet = new Set((cfg.days || [1, 2, 3, 4, 5]).map(Number));
+        document.querySelectorAll('.ps-day-check').forEach(chk => {
+            chk.checked = daysSet.has(Number(chk.value));
+        });
+
+        renderPowerScheduleStatus(status);
+    } catch (e) {
+        const summaryEl = document.getElementById('ps-status-summary');
+        if (summaryEl) summaryEl.textContent = '⚠️ No se pudo cargar el estado del programador.';
+    }
+}
+
+async function savePowerSchedule() {
+    const days = Array.from(document.querySelectorAll('.ps-day-check:checked')).map(c => Number(c.value));
+    const payload = {
+        enabled: document.getElementById('ps-enabled').checked,
+        action: document.getElementById('ps-action').value,
+        offTime: document.getElementById('ps-off-time').value || '18:30',
+        onTime: document.getElementById('ps-on-time').value || '07:30',
+        warnMinutes: Number(document.getElementById('ps-warn-minutes').value) || 0,
+        useRtc: document.getElementById('ps-use-rtc').checked,
+        enforceWeekend: document.getElementById('ps-enforce-weekend').checked,
+        days
+    };
+
+    try {
+        const res = await fetch('/api/power/schedule', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Error guardando horario');
+        renderPowerScheduleStatus(data.status);
+        showNotification('⏰ Horario automático de energía guardado correctamente.');
+    } catch (e) {
+        alert('Error al guardar el horario automático: ' + e.message);
+    }
 }
 
 // ==========================================

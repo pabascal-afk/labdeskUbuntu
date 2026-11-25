@@ -94,6 +94,14 @@ function initSchema() {
             db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('unlock_pin', '2846')`);
             db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('school_name', 'LabDesk Aula Digital')`);
             db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('default_wallpaper', '/uploads/branding.jpg')`);
+            db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('power_schedule_enabled', '1')`);
+            db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('power_schedule_action', 'suspend')`);
+            db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('power_schedule_off_time', '18:30')`);
+            db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('power_schedule_on_time', '07:30')`);
+            db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('power_schedule_days', '1,2,3,4,5')`);
+            db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('power_schedule_use_rtc', '1')`);
+            db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('power_schedule_warn_minutes', '2')`);
+            db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('power_schedule_enforce_weekend', '0')`);
             
             const defaultPresets = JSON.stringify([
                 { name: 'Google Classroom', url: 'https://classroom.google.com', icon: '🎓' },
@@ -619,6 +627,125 @@ echo "✅ Modo Invitado forzado con éxito. Cada sesión será limpia y privada.
             description: 'Verifica ping al servidor y a servidores DNS externos.',
             icon: '🌐',
             content: `#!/bin/bash\necho "=== Ping Gateway / DNS ==="\nping -c 2 8.8.8.8 || ping -c 2 1.1.1.1`
+        },
+        {
+            name: '☀️ Mantener Pantallas Siempre Encendidas (Sin Suspensión)',
+            description: 'Desactiva DPMS, protector de pantalla, apagado del monitor y suspensión automática por inactividad durante el día.',
+            icon: '☀️',
+            content: `#!/bin/bash
+echo "=========================================="
+echo "☀️ Configurando Pantallas Siempre Encendidas"
+echo "=========================================="
+
+export DISPLAY="\${DISPLAY:-:0}"
+export XAUTHORITY="\${XAUTHORITY:-\$HOME/.Xauthority}"
+
+# 1. Aplicar inmediatamente en la sesión X11 activa
+xset s off 2>/dev/null || true
+xset -dpms 2>/dev/null || true
+xset s noblank 2>/dev/null || true
+
+# 2. Asegurar persistencia en Openbox autostart
+AUTOSTART="\$HOME/.config/openbox/autostart"
+mkdir -p "\$HOME/.config/openbox"
+touch "\$AUTOSTART"
+for cmd in "xset s off" "xset -dpms" "xset s noblank"; do
+    if ! grep -qF "\$cmd" "\$AUTOSTART"; then
+        sed -i "1i \$cmd" "\$AUTOSTART" 2>/dev/null || echo "\$cmd" >> "\$AUTOSTART"
+    fi
+done
+
+# 3. Configuración persistente en Xorg (evita apagado de monitor por DPMS)
+sudo -n mkdir -p /etc/X11/xorg.conf.d 2>/dev/null || true
+cat << 'XEOF' | sudo -n tee /etc/X11/xorg.conf.d/10-no-dpms.conf >/dev/null 2>&1 || true
+Section "ServerFlags"
+    Option "BlankTime" "0"
+    Option "StandbyTime" "0"
+    Option "SuspendTime" "0"
+    Option "OffTime" "0"
+EndSection
+
+Section "Monitor"
+    Identifier "Configured Monitor"
+    Option "DPMS" "false"
+EndSection
+XEOF
+
+# 4. Evitar suspensión automática por inactividad en systemd-logind (sin bloquear suspensión manual/programada)
+sudo -n mkdir -p /etc/systemd/logind.conf.d 2>/dev/null || true
+cat << 'LEOF' | sudo -n tee /etc/systemd/logind.conf.d/99-labdesk-no-idle.conf >/dev/null 2>&1 || true
+[Login]
+IdleAction=ignore
+IdleActionSec=0
+LEOF
+sudo -n systemctl reload systemd-logind 2>/dev/null || sudo -n killall -HUP systemd-logind 2>/dev/null || true
+
+# 5. Desactivar bloqueadores/protectores de otros entornos si existen
+gsettings set org.gnome.desktop.session idle-delay 0 2>/dev/null || true
+gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'nothing' 2>/dev/null || true
+gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-type 'nothing' 2>/dev/null || true
+xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/dpms-enabled -s false 2>/dev/null || true
+pkill -f xscreensaver 2>/dev/null || true
+pkill -f light-locker 2>/dev/null || true
+
+echo "✅ DPMS y protector de pantalla desactivados."
+xset q 2>/dev/null | grep -E "timeout:|DPMS is" || true
+echo "=========================================="`
+        },
+        {
+            name: '⚡ Habilitar Wake-on-LAN y Despertar Automático (RTC)',
+            description: 'Configura la tarjeta de red para Wake-on-LAN persistente y otorga permisos para despertar/suspender/apagar sin contraseña.',
+            icon: '⚡',
+            content: `#!/bin/bash
+echo "=========================================="
+echo "⚡ Configurando Wake-on-LAN y RTC Wake"
+echo "=========================================="
+
+# 1. Instalar ethtool si no existe
+if ! command -v ethtool >/dev/null 2>&1; then
+    sudo -n apt-get update -qq 2>/dev/null || true
+    sudo -n apt-get install -y -qq ethtool 2>/dev/null || true
+fi
+
+# 2. Activar Wake-on-LAN (MagicPacket) en interfaces cableadas
+ACTIVE_IFACE=""
+for iface in /sys/class/net/*; do
+    name=$(basename "\$iface")
+    [ "\$name" = "lo" ] && continue
+    [ -d "\$iface/wireless" ] && continue
+    sudo -n ethtool -s "\$name" wol g 2>/dev/null && ACTIVE_IFACE="\$name" && echo "✅ WoL habilitado en \$name"
+done
+
+# 3. Crear servicio systemd persistente para Wake-on-LAN tras reinicios
+cat << 'WEOF' | sudo -n tee /etc/systemd/system/labdesk-wol.service >/dev/null 2>&1 || true
+[Unit]
+Description=Habilitar Wake-on-LAN para LabDesk
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'for i in /sys/class/net/*; do n=$(basename "$i"); [ "$n" != "lo" ] && [ ! -d "$i/wireless" ] && ethtool -s "$n" wol g 2>/dev/null || true; done'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+WEOF
+sudo -n systemctl daemon-reload 2>/dev/null || true
+sudo -n systemctl enable --now labdesk-wol.service 2>/dev/null || true
+
+# 4. Permisos sudo sin contraseña para energía y RTC
+USER_NAME="\${USER:-estudiante}"
+cat << SEOF | sudo -n tee /etc/sudoers.d/labdesk-power >/dev/null 2>&1 || true
+\$USER_NAME ALL=(ALL) NOPASSWD: /sbin/poweroff, /sbin/reboot, /usr/sbin/poweroff, /usr/sbin/reboot, /bin/systemctl poweroff, /bin/systemctl reboot, /bin/systemctl suspend, /usr/bin/systemctl poweroff, /usr/bin/systemctl reboot, /usr/bin/systemctl suspend, /usr/sbin/rtcwake, /sbin/rtcwake, /usr/sbin/ethtool, /sbin/ethtool, /usr/bin/tee /sys/class/rtc/rtc0/wakealarm
+SEOF
+sudo -n chmod 440 /etc/sudoers.d/labdesk-power 2>/dev/null || true
+
+if command -v rtcwake >/dev/null 2>&1; then
+    echo "✅ rtcwake disponible para despertar autónomo."
+else
+    echo "ℹ️ rtcwake no encontrado; se usará /sys/class/rtc/rtc0/wakealarm como respaldo."
+fi
+echo "=========================================="`
         }
     ];
 
@@ -634,7 +761,7 @@ echo "✅ Modo Invitado forzado con éxito. Cada sesión será limpia y privada.
                         if (!insErr) console.log(`✅ Default Linux script inserted: ${s.name}`);
                     }
                 );
-            } else if (cleanName.includes('Actualizar Software') || cleanName.includes('Audio USB') || cleanName.includes('Audífonos USB') || cleanName.includes('Abrir Consola') || cleanName.includes('Terminal') || cleanName.includes('Invitado') || cleanName.includes('Guest')) {
+            } else if (cleanName.includes('Actualizar Software') || cleanName.includes('Audio USB') || cleanName.includes('Audífonos USB') || cleanName.includes('Abrir Consola') || cleanName.includes('Terminal') || cleanName.includes('Invitado') || cleanName.includes('Guest') || cleanName.includes('Mantener Pantallas') || cleanName.includes('Wake-on-LAN')) {
                 // Mantener los scripts esenciales al día
                 db.run(
                     `UPDATE scripts SET name = ?, description = ?, icon = ?, content = ? WHERE id = ?`,

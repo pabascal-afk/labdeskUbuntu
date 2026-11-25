@@ -305,7 +305,7 @@
     <!-- MODAL: CONTROL DE ENERGÍA                      -->
     <!-- ============================================== -->
     <div id="modal-power" class="modal">
-        <div class="modal-content">
+        <div class="modal-content" style="width: 580px;">
             <div class="modal-header">
                 <h3>⚡ Control de Energía y Mantenimiento</h3>
                 <button class="btn-close" onclick="closeModal('modal-power')">&times;</button>
@@ -322,6 +322,14 @@
 
                     <div class="power-card">
                         <div>
+                            <strong>🌙 Suspender Estaciones (Dormir)</strong>
+                            <p>Pone en reposo rápido las estaciones para despertar en segundos.</p>
+                        </div>
+                        <button class="btn btn-secondary" onclick="sendPowerAction('suspend')">Suspender</button>
+                    </div>
+
+                    <div class="power-card">
+                        <div>
                             <strong>🔄 Reiniciar Estaciones</strong>
                             <p>Ejecuta reinicio limpio en todos los equipos del sector.</p>
                         </div>
@@ -334,6 +342,75 @@
                             <p>Apaga ordenadamente los equipos al finalizar la clase.</p>
                         </div>
                         <button class="btn btn-danger" onclick="sendPowerAction('shutdown')">Apagar Todo</button>
+                    </div>
+                </div>
+
+                <hr style="border-color: #1e293b; margin: 1.15rem 0;">
+
+                <div style="background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 1rem;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+                        <div>
+                            <strong style="font-size: 0.95rem;">⏰ Horario Automático Semanal</strong>
+                            <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">Dormir/apagar al final de la jornada y despertar automáticamente (WoL + RTC).</p>
+                        </div>
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.85rem; font-weight:600;">
+                            <input type="checkbox" id="ps-enabled" checked> Activo
+                        </label>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
+                        <div>
+                            <label style="display:block; font-size:0.75rem; color:var(--text-muted); margin-bottom:4px;">Acción de cierre</label>
+                            <select id="ps-action" class="form-control" style="width:100%; padding:6px 8px; background:#1e293b; color:#f8fafc; border:1px solid #334155; border-radius:6px;">
+                                <option value="suspend">🌙 Suspender (Dormir)</option>
+                                <option value="shutdown">🛑 Apagar (Poweroff)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:0.75rem; color:var(--text-muted); margin-bottom:4px;">Aviso previo (minutos)</label>
+                            <input type="number" id="ps-warn-minutes" min="0" max="30" value="2" style="width:100%; padding:6px 8px; background:#1e293b; color:#f8fafc; border:1px solid #334155; border-radius:6px;">
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
+                        <div>
+                            <label style="display:block; font-size:0.75rem; color:var(--text-muted); margin-bottom:4px;">☀️ Encender / Despertar</label>
+                            <input type="time" id="ps-on-time" value="07:30" style="width:100%; padding:6px 8px; background:#1e293b; color:#f8fafc; border:1px solid #334155; border-radius:6px;">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:0.75rem; color:var(--text-muted); margin-bottom:4px;">🌙 Dormir / Apagar</label>
+                            <input type="time" id="ps-off-time" value="18:30" style="width:100%; padding:6px 8px; background:#1e293b; color:#f8fafc; border:1px solid #334155; border-radius:6px;">
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 0.75rem;">
+                        <label style="display:block; font-size:0.75rem; color:var(--text-muted); margin-bottom:6px;">Días activos (los días desmarcados quedan apagados)</label>
+                        <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                            <label style="display:flex; align-items:center; gap:4px; background:#1e293b; padding:4px 8px; border-radius:6px; font-size:0.78rem; cursor:pointer;"><input type="checkbox" class="ps-day-check" value="1" checked> Lun</label>
+                            <label style="display:flex; align-items:center; gap:4px; background:#1e293b; padding:4px 8px; border-radius:6px; font-size:0.78rem; cursor:pointer;"><input type="checkbox" class="ps-day-check" value="2" checked> Mar</label>
+                            <label style="display:flex; align-items:center; gap:4px; background:#1e293b; padding:4px 8px; border-radius:6px; font-size:0.78rem; cursor:pointer;"><input type="checkbox" class="ps-day-check" value="3" checked> Mié</label>
+                            <label style="display:flex; align-items:center; gap:4px; background:#1e293b; padding:4px 8px; border-radius:6px; font-size:0.78rem; cursor:pointer;"><input type="checkbox" class="ps-day-check" value="4" checked> Jue</label>
+                            <label style="display:flex; align-items:center; gap:4px; background:#1e293b; padding:4px 8px; border-radius:6px; font-size:0.78rem; cursor:pointer;"><input type="checkbox" class="ps-day-check" value="5" checked> Vie</label>
+                            <label style="display:flex; align-items:center; gap:4px; background:#1e293b; padding:4px 8px; border-radius:6px; font-size:0.78rem; cursor:pointer;"><input type="checkbox" class="ps-day-check" value="6"> Sáb</label>
+                            <label style="display:flex; align-items:center; gap:4px; background:#1e293b; padding:4px 8px; border-radius:6px; font-size:0.78rem; cursor:pointer;"><input type="checkbox" class="ps-day-check" value="0"> Dom</label>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:0.75rem; font-size:0.78rem; color:#cbd5e1;">
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                            <input type="checkbox" id="ps-use-rtc" checked> Programar despertador interno RTC en cada PC (respaldo si el servidor está apagado)
+                        </label>
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                            <input type="checkbox" id="ps-enforce-weekend"> Forzar dormir/apagar si alguien enciende un equipo en fin de semana
+                        </label>
+                    </div>
+
+                    <div id="ps-status-summary" style="background:#020617; border:1px solid #1e293b; border-radius:6px; padding:8px 10px; font-size:0.75rem; color:#94a3b8; margin-bottom:0.75rem;">
+                        Cargando estado del programador...
+                    </div>
+
+                    <div style="display:flex; justify-content:flex-end;">
+                        <button class="btn btn-primary btn-sm" id="btn-save-power-schedule" onclick="savePowerSchedule()">💾 Guardar Horario Automático</button>
                     </div>
                 </div>
             </div>
